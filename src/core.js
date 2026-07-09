@@ -311,8 +311,8 @@ export function recent({ k = 15 } = {}) {
 export function graphData() {
   const deg = {};
   for (const r of all('SELECT dst, COUNT(*) n FROM links WHERE dst IS NOT NULL GROUP BY dst')) deg[r.dst] = r.n;
-  const nodes = all('SELECT slug,title,type FROM notes')
-    .map((n) => ({ id: n.slug, title: n.title, type: n.type, deg: deg[n.slug] || 0 }));
+  const nodes = all('SELECT slug,title,type,tags FROM notes')
+    .map((n) => ({ id: n.slug, title: n.title, type: n.type, tags: JSON.parse(n.tags || '[]'), deg: deg[n.slug] || 0 }));
   const edges = all('SELECT src, dst FROM links WHERE dst IS NOT NULL')
     .map((e) => ({ source: e.src, target: e.dst }));
   // broken links become "unwritten" ghost nodes — notes worth creating

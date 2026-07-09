@@ -117,6 +117,15 @@
   #tip .tt{font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px;}
   #tip .tt .d{width:8px;height:8px;border-radius:50%;box-shadow:0 0 8px currentColor;flex:none;}
   #tip .mt{font-size:11px;color:var(--ink-dim);margin-top:3px;}
+  #tagfilter{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:10px;padding:6px 7px 6px 14px;border-radius:100px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:var(--shadow);font-size:12.5px;color:var(--ink-dim);cursor:pointer;}
+  #tagfilter b{color:var(--accent-2);font-weight:600;}
+  #tagfilter .x{width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:var(--card);color:var(--ink-dim);font-size:10px;}
+  #tagfilter:hover .x{color:var(--ink);}
+  .chip.tag:hover{border-color:var(--accent-2);color:var(--accent-2);}
+  .tagcloud{display:flex;flex-wrap:wrap;gap:7px;}
+  .tagpill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 11px;border-radius:100px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink-dim);cursor:pointer;transition:border-color .12s,color .12s;}
+  .tagpill:hover{border-color:var(--accent-2);color:var(--ink);}
+  .tagpill b{color:var(--ink-faint);font-weight:600;font-variant-numeric:tabular-nums;}
   .back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-dim);padding:5px 11px 5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);margin-bottom:16px;cursor:pointer;}
   .back:hover{color:var(--ink);border-color:var(--line-2);}
   @media (max-width:680px){#bar{padding:15px 16px;gap:14px;}#legend{display:none;}#hint{display:none;}#tip{display:none!important;}.brand .eyebrow{display:none;}.stat{display:none;}.search{width:auto;flex:1;min-width:0;}#controls{bottom:20px;right:16px;}}
@@ -150,6 +159,7 @@
 
 <div id="legend"></div>
 <div id="hint" class="mono">hover to trace · click to read · scroll to zoom · drag to move</div>
+<div id="tagfilter"></div>
 <div id="tip"></div>
 <aside id="panel"><div class="close" id="px" role="button" aria-label="Close">×</div><div id="pb"></div></aside>
 
@@ -159,11 +169,11 @@ const TYPE={moc:{label:"map"},project:{label:"tool"},concept:{label:"concept"},s
 const TYPE_COLOR={project:"project",concept:"concept",source:"source",entity:"entity",moc:"moc",note:"concept",synthesis:"entity",person:"moc",daily:"concept",area:"source"};
 // ── data: fetched live from the cortex server ────────────────────────────────
 const slug=s=>String(s).toLowerCase().trim();
-let nodes=[],edges=[],bySlug=new Map(),nbr=new Map(),resolver=new Map(),typeCounts={},maxDeg=1,realCount=0,ghostCount=0;
+let nodes=[],edges=[],bySlug=new Map(),nbr=new Map(),resolver=new Map(),typeCounts={},tagCounts={},maxDeg=1,realCount=0,ghostCount=0;
 function applyGraph(g,keep){
   const prev=bySlug,selId=selected?selected.id:null;
   nodes=(g.nodes||[]).map((n,i)=>{const p=keep&&prev.get(n.id),a=i*2.399963,r=8+Math.sqrt(i)*16;
-    return {id:n.id,title:n.title||n.id,type:n.type||"note",deg:0,ghost:!!n.ghost||n.type==="ghost",
+    return {id:n.id,title:n.title||n.id,type:n.type||"note",tags:n.tags||[],deg:0,ghost:!!n.ghost||n.type==="ghost",
       x:p?p.x:Math.cos(a)*r,y:p?p.y:Math.sin(a)*r,vx:0,vy:0,hi:p?p.hi:1,sc:p?p.sc:1};});
   bySlug=new Map(nodes.map(n=>[n.id,n]));
   edges=(g.edges||[]).filter(e=>bySlug.has(e.source)&&bySlug.has(e.target)).map(e=>({s:bySlug.get(e.source),t:bySlug.get(e.target)}));
@@ -171,8 +181,8 @@ function applyGraph(g,keep){
   edges.forEach(e=>{nbr.get(e.s.id).add(e.t.id);nbr.get(e.t.id).add(e.s.id);});
   nodes.forEach(n=>n.deg=nbr.get(n.id).size);
   realCount=nodes.filter(n=>!n.ghost).length;ghostCount=nodes.filter(n=>n.ghost).length;maxDeg=Math.max(1,...nodes.map(n=>n.deg));
-  resolver=new Map();typeCounts={};
-  nodes.forEach(n=>{resolver.set(n.id,n.id);resolver.set(slug(n.title),n.id);if(!n.ghost)typeCounts[n.type]=(typeCounts[n.type]||0)+1;n.d0=(1-n.deg/maxDeg)*0.4;});
+  resolver=new Map();typeCounts={};tagCounts={};
+  nodes.forEach(n=>{resolver.set(n.id,n.id);resolver.set(slug(n.title),n.id);if(!n.ghost){typeCounts[n.type]=(typeCounts[n.type]||0)+1;(n.tags||[]).forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1);}n.d0=(1-n.deg/maxDeg)*0.4;});
   document.getElementById("nc").textContent=realCount;
   document.getElementById("lc").textContent=edges.length;
   document.getElementById("q").placeholder=`search ${realCount} notes…  ( / )`;
@@ -291,6 +301,7 @@ function render(){
   for(const n of nodes){if(n.ghost&&n!==focus)continue;const isHub=n.deg>=Math.max(5,maxDeg*0.42);
     if(n===focus)cand.push([n,3]);else if(focus&&active.has(n.id))cand.push([n,2]);
     else if(!focus&&filterType&&n.type===filterType&&n.deg>=2)cand.push([n,2]);
+    else if(!focus&&filterTag&&(n.tags||[]).includes(filterTag)&&n.deg>=1)cand.push([n,2]);
     else if(!focus&&!filterType&&isHub)cand.push([n,1]);}
   cand.sort((a,b)=>b[1]-a[1]);
   ctx.textAlign="center";ctx.textBaseline="top";
@@ -316,12 +327,13 @@ function frame(){
   for(const n of nodes){let tgt=1;
     if(focus)tgt=(n===focus||nbr.get(focus.id).has(n.id))?1:0.13;
     else if(filterType)tgt=(n.type===filterType)?1:0.11;
+    else if(filterTag)tgt=(n.tags||[]).includes(filterTag)?1:0.11;
     n.hi+=(tgt-n.hi)*0.2;const st=(n===hovered)?1.25:1;n.sc+=(st-n.sc)*0.2;}
   render();requestAnimationFrame(frame);
 }
 
 // ── interaction ──────────────────────────────────────────────────────────────
-let hovered=null,selected=null,dragging=null,panning=false,moved=false,downX=0,downY=0,userInteracted=false,panTo=null,filterType=null;
+let hovered=null,selected=null,dragging=null,panning=false,moved=false,downX=0,downY=0,userInteracted=false,panTo=null,filterType=null,filterTag=null;
 function markUsed(){userInteracted=true;panTo=null;const h=document.getElementById("hint");if(h)h.classList.add("gone");}
 // SCREEN-space hit test with a generous radius (visible node size + 10px, min 16px).
 // The old world-space "/view.k" formula shrank the target below the visible bubble.
@@ -368,7 +380,7 @@ function centerOn(n){const pw=innerWidth>680?Math.min(452,innerWidth*0.93):0;con
 function zoomBy(f){markUsed();const w=toWorld(W/2,H/2);view.k=Math.max(0.35,Math.min(4.5,view.k*f));const p=S({x:w.x,y:w.y});view.x+=W/2-p.x;view.y+=H/2-p.y;}
 document.getElementById("controls").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const a=b.dataset.act;
   if(a==="in")zoomBy(1.3);else if(a==="out")zoomBy(1/1.3);
-  else if(a==="fit"){userInteracted=false;closePanel();filterType=null;syncLegend();fit(null,true);}
+  else if(a==="fit"){userInteracted=false;closePanel();clearFilters();fit(null,true);}
   else if(a==="theme"){const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",cur==="dark"?"light":"dark");}});
 
 // ── note reader ───────────────────────────────────────────────────────────────
@@ -380,7 +392,7 @@ const panel=document.getElementById("panel");
 let navStack=[];
 async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
   if(selected&&selected.id!==id&&!(opts&&opts.back))navStack.push(selected.id);
-  selected=n;filterType=null;syncLegend();markUsed();centerOn(n);tip.style.display="none";
+  selected=n;filterType=null;filterTag=null;syncLegend();syncTagFilter();markUsed();centerOn(n);tip.style.display="none";
   const back=edges.filter(e=>e.t===n).map(e=>e.s),fwd=edges.filter(e=>e.s===n).map(e=>e.t);
   const rows=arr=>arr.map(t=>`<div class="backlink" ${t.ghost?'style="cursor:default"':`data-go="${t.id}"`}><span class="d" style="color:${colorOf(t)};background:${colorOf(t)}"></span>${esc(t.title)}${t.ghost?'<span class="u">unwritten</span>':""}</div>`).join("");
   const prev=navStack.length?bySlug.get(navStack[navStack.length-1]):null;
@@ -399,28 +411,39 @@ async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
   try{const note=await (await fetch("/api/note?slug="+encodeURIComponent(id))).json();
     if(selected!==n)return;
     const bodyEl=document.getElementById("noteBody");if(bodyEl){bodyEl.innerHTML=renderBody(note.body||"");bodyEl.querySelectorAll("[data-go]").forEach(a=>a.addEventListener("click",()=>openNote(a.dataset.go)));}
-    const ch=document.getElementById("chips");if(ch&&note.tags&&note.tags.length)note.tags.forEach(t=>{const s=document.createElement("span");s.className="chip";s.textContent="#"+t;ch.appendChild(s);});
+    const ch=document.getElementById("chips");if(ch&&note.tags&&note.tags.length)note.tags.forEach(t=>{const s=document.createElement("span");s.className="chip tag";s.textContent="#"+t;s.style.cursor="pointer";s.title="Filter the graph by #"+t;s.addEventListener("click",()=>setTagFilter(t));ch.appendChild(s);});
   }catch(e){const b=document.getElementById("noteBody");if(b)b.textContent="(could not load note)";}}   // click to navigate + hover a row to cross-highlight the node in the graph
 function goBack(){const prev=navStack.pop();if(prev)openNote(prev,{back:true});}
 function closePanel(){panel.classList.remove("open");selected=null;navStack=[];}
 document.getElementById("px").addEventListener("click",closePanel);
+
+// ── tag filter: highlight every note carrying a tag ───────────────────────────
+function setTagFilter(t){filterTag=filterTag===t?null:t;filterType=null;markUsed();syncLegend();syncTagFilter();}
+function clearFilters(){filterTag=null;filterType=null;syncLegend();syncTagFilter();}
+function syncTagFilter(){const el=document.getElementById("tagfilter");if(!el)return;
+  if(filterTag){el.innerHTML=`<span>filtering <b>#${esc(filterTag)}</b> · ${tagCounts[filterTag]||0} notes</span><span class="x">✕</span>`;el.style.display="flex";}
+  else el.style.display="none";}
+document.getElementById("tagfilter").addEventListener("click",()=>{filterTag=null;syncTagFilter();markUsed();});
 
 // overview: click the header stat to see the graph at a glance
 function wireRows(){panel.querySelectorAll("[data-go]").forEach(el=>{
   el.addEventListener("click",()=>openNote(el.dataset.go));
   el.addEventListener("mouseenter",()=>{const t=bySlug.get(el.dataset.go);if(t&&!t.ghost)hovered=t;});
   el.addEventListener("mouseleave",()=>{hovered=null;});});}
-function showOverview(){selected=null;navStack=[];filterType=null;syncLegend();markUsed();tip.style.display="none";
+function showOverview(){selected=null;navStack=[];clearFilters();markUsed();tip.style.display="none";
   const hubs=nodes.filter(n=>!n.ghost).sort((a,b)=>b.deg-a.deg).slice(0,6);
   const types=Object.keys(typeCounts).map(t=>({t,c:typeCounts[t]})).sort((a,b)=>b.c-a.c);
+  const topTags=Object.keys(tagCounts).map(t=>({t,c:tagCounts[t]})).sort((a,b)=>b.c-a.c).slice(0,10);
   const unwritten=nodes.filter(n=>n.ghost).length;
   document.getElementById("pb").innerHTML=
     `<div class="kicker mono" style="color:var(--accent)">overview</div>
      <h1>The graph at a glance</h1>
      <div class="chips"><span class="chip">${realCount} notes</span><span class="chip">${edges.length} links</span><span class="chip">${unwritten} unwritten</span></div>
      <div class="meta"><div class="t">Most connected</div>${hubs.map(h=>`<div class="backlink" data-go="${h.id}"><span class="d" style="color:${colorOf(h)};background:${colorOf(h)}"></span>${esc(h.title)}<span class="u">${h.deg} links</span></div>`).join("")}</div>
-     <div class="meta"><div class="t">By type</div>${types.map(x=>{const c=css("--n-"+(TYPE_COLOR[x.t]||"concept"));return `<div class="backlink" style="cursor:default"><span class="d" style="color:${c};background:${c}"></span>${(TYPE[x.t]||{label:x.t}).label}<span class="u">${x.c}</span></div>`;}).join("")}</div>`;
-  panel.classList.add("open");panel.scrollTop=0;wireRows();}
+     <div class="meta"><div class="t">By type</div>${types.map(x=>{const c=css("--n-"+(TYPE_COLOR[x.t]||"concept"));return `<div class="backlink" style="cursor:default"><span class="d" style="color:${c};background:${c}"></span>${(TYPE[x.t]||{label:x.t}).label}<span class="u">${x.c}</span></div>`;}).join("")}</div>
+     ${topTags.length?`<div class="meta"><div class="t">Top tags · click to filter</div><div class="tagcloud">${topTags.map(x=>`<span class="tagpill" data-tag="${esc(x.t)}">#${esc(x.t)}<b>${x.c}</b></span>`).join("")}</div></div>`:""}`;
+  panel.classList.add("open");panel.scrollTop=0;wireRows();
+  panel.querySelectorAll(".tagpill[data-tag]").forEach(el=>el.addEventListener("click",()=>setTagFilter(el.dataset.tag)));}
 const statEl=document.querySelector(".stat");statEl.style.cursor="pointer";statEl.title="Graph overview";statEl.addEventListener("click",showOverview);
 
 // ── search with dropdown ──────────────────────────────────────────────────────
@@ -447,7 +470,7 @@ q.addEventListener("keydown",e=>{if(!matches.length)return;
   else if(e.key==="Enter"&&selIdx>=0){openNote(matches[selIdx].slug);closeResults();q.blur();}});
 document.addEventListener("click",e=>{if(!e.target.closest(".search"))closeResults();});
 addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement!==q){e.preventDefault();q.focus();}
-  else if(e.key==="Escape"){closeResults();closePanel();q.blur();hovered=null;}
+  else if(e.key==="Escape"){closeResults();closePanel();q.blur();hovered=null;clearFilters();}
   else if(e.key==="ArrowLeft"&&panel.classList.contains("open")&&navStack.length&&document.activeElement!==q){e.preventDefault();goBack();}
   else if((e.key==="+"||e.key==="=")&&document.activeElement!==q)zoomBy(1.3);
   else if(e.key==="-"&&document.activeElement!==q)zoomBy(1/1.3);
@@ -474,6 +497,9 @@ resize();applyTheme();
 (async()=>{await loadGraph();alpha=1;for(let i=0;i<420;i++)step();alpha=0;fit();if(reduceMotion)intro=1;requestAnimationFrame(frame);})();
 // live refresh: re-fetch the graph when the server signals a vault change (keeps positions, gently re-settles)
 try{const es=new EventSource("/api/events");es.onmessage=()=>refreshGraph();}catch(e){}
+
+
+
 </script>
 
 </body></html>
