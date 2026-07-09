@@ -77,7 +77,12 @@ Vault location: `$CORTEX_VAULT` (default `./vault`).
 
 ## Web view
 
-`cortex serve` starts a **zero-dependency** web app at `http://localhost:7800` — an interactive, Obsidian-style **knowledge graph** of your vault: nodes are notes (sized by backlinks, coloured by type), edges are `[[wikilinks]]`. Hover to highlight a note's neighbourhood, drag to rearrange, scroll to zoom, click a node to read it (with clickable wikilinks), and search from the top bar. It's the same brain your agent writes to — watch it grow.
+`cortex serve` starts a **zero-dependency** web app at `http://localhost:7800` — a premium, Obsidian-style **knowledge graph** of your vault rendered on canvas: glowing nodes (sized by connections, coloured by type) joined by `[[wikilink]]` synapses.
+
+- **Hover** any note to trace its neighbourhood — connected notes light up with energy flowing along the links, everything else dims.
+- **Click** a note to read it in a side panel (fetched live): its body with clickable `[[wikilinks]]`, its tags, and its *links to* / *linked from* lists — navigate note-to-note with a back button.
+- **Search** from the top bar (ranked dropdown, keyboard-navigable), **filter** by type from the legend, click the stat for a **graph overview** (hubs, type breakdown).
+- Drag to rearrange, scroll/pinch to zoom, recenter, and a light/dark theme toggle. It's the same brain your agent writes to — watch it grow.
 
 Want a graph to look at right away? Seed a starter vault (interlinked notes about the toolkit itself):
 
