@@ -82,7 +82,8 @@ Vault location: `$CORTEX_VAULT` (default `./vault`).
 - **Hover** any note to trace its neighbourhood — connected notes light up with energy flowing along the links, everything else dims.
 - **Click** a note to read it in a side panel (fetched live): its body with clickable `[[wikilinks]]`, its tags, and its *links to* / *linked from* lists — navigate note-to-note with a back button.
 - **Search** from the top bar (ranked dropdown, keyboard-navigable), **filter** by type from the legend, click the stat for a **graph overview** (hubs, type breakdown).
-- Drag to rearrange, scroll/pinch to zoom, recenter, and a light/dark theme toggle. It's the same brain your agent writes to — watch it grow.
+- Drag to rearrange, scroll/pinch to zoom, recenter, and a light/dark theme toggle.
+- **Live** — the server watches the vault and pushes updates over SSE, so the graph grows in real time as your agent (or you, in Obsidian) writes notes. It's the same brain your agent writes to — watch it grow.
 
 Want a graph to look at right away? Seed a starter vault (interlinked notes about the toolkit itself):
 

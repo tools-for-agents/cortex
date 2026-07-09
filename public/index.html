@@ -160,9 +160,11 @@ const TYPE_COLOR={project:"project",concept:"concept",source:"source",entity:"en
 // ── data: fetched live from the cortex server ────────────────────────────────
 const slug=s=>String(s).toLowerCase().trim();
 let nodes=[],edges=[],bySlug=new Map(),nbr=new Map(),resolver=new Map(),typeCounts={},maxDeg=1,realCount=0,ghostCount=0;
-async function loadGraph(){
-  let g;try{g=await (await fetch("/api/graph")).json();}catch(e){g={nodes:[],edges:[]};}
-  nodes=(g.nodes||[]).map(n=>({id:n.id,title:n.title||n.id,type:n.type||"note",deg:0,ghost:!!n.ghost||n.type==="ghost"}));
+function applyGraph(g,keep){
+  const prev=bySlug,selId=selected?selected.id:null;
+  nodes=(g.nodes||[]).map((n,i)=>{const p=keep&&prev.get(n.id),a=i*2.399963,r=8+Math.sqrt(i)*16;
+    return {id:n.id,title:n.title||n.id,type:n.type||"note",deg:0,ghost:!!n.ghost||n.type==="ghost",
+      x:p?p.x:Math.cos(a)*r,y:p?p.y:Math.sin(a)*r,vx:0,vy:0,hi:p?p.hi:1,sc:p?p.sc:1};});
   bySlug=new Map(nodes.map(n=>[n.id,n]));
   edges=(g.edges||[]).filter(e=>bySlug.has(e.source)&&bySlug.has(e.target)).map(e=>({s:bySlug.get(e.source),t:bySlug.get(e.target)}));
   nbr=new Map();nodes.forEach(n=>nbr.set(n.id,new Set()));
@@ -170,12 +172,15 @@ async function loadGraph(){
   nodes.forEach(n=>n.deg=nbr.get(n.id).size);
   realCount=nodes.filter(n=>!n.ghost).length;ghostCount=nodes.filter(n=>n.ghost).length;maxDeg=Math.max(1,...nodes.map(n=>n.deg));
   resolver=new Map();typeCounts={};
-  nodes.forEach((n,i)=>{resolver.set(n.id,n.id);resolver.set(slug(n.title),n.id);if(!n.ghost)typeCounts[n.type]=(typeCounts[n.type]||0)+1;n.d0=(1-n.deg/maxDeg)*0.4;const a=i*2.399963,r=8+Math.sqrt(i)*16;n.x=Math.cos(a)*r;n.y=Math.sin(a)*r;n.vx=0;n.vy=0;n.hi=1;n.sc=1;});
+  nodes.forEach(n=>{resolver.set(n.id,n.id);resolver.set(slug(n.title),n.id);if(!n.ghost)typeCounts[n.type]=(typeCounts[n.type]||0)+1;n.d0=(1-n.deg/maxDeg)*0.4;});
   document.getElementById("nc").textContent=realCount;
   document.getElementById("lc").textContent=edges.length;
   document.getElementById("q").placeholder=`search ${realCount} notes…  ( / )`;
-  buildLegend();
+  buildLegend();hovered=null;
+  selected=selId?(bySlug.get(selId)||null):null;if(selId&&!selected)closePanel();
 }
+async function loadGraph(){let g;try{g=await (await fetch("/api/graph")).json();}catch(e){g={nodes:[],edges:[]};}applyGraph(g,false);}
+async function refreshGraph(){let g;try{g=await (await fetch("/api/graph")).json();}catch(e){return;}applyGraph(g,true);alpha=Math.max(alpha,0.6);}
 
 // ── canvas + palette ─────────────────────────────────────────────────────────
 const cv=document.getElementById("c"), ctx=cv.getContext("2d");
@@ -467,6 +472,8 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme)
 // ── boot ──────────────────────────────────────────────────────────────────────
 resize();applyTheme();
 (async()=>{await loadGraph();alpha=1;for(let i=0;i<420;i++)step();alpha=0;fit();if(reduceMotion)intro=1;requestAnimationFrame(frame);})();
+// live refresh: re-fetch the graph when the server signals a vault change (keeps positions, gently re-settles)
+try{const es=new EventSource("/api/events");es.onmessage=()=>refreshGraph();}catch(e){}
 </script>
 
 </body></html>
