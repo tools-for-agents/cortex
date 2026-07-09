@@ -1,0 +1,10 @@
+{
+  "name": "cortex-agent",
+  "version": "0.1.0",
+  "description": "A local, Obsidian-compatible second brain for agents: a wikilinked markdown vault with backlinks, a knowledge graph and FTS5 search. Zero dependencies.",
+  "type": "module",
+  "bin": { "cortex": "src/cli.js" },
+  "engines": { "node": ">=22" },
+  "scripts": { "mcp": "node mcp/mcp-server.js" },
+  "license": "MIT"
+}

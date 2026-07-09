@@ -1,0 +1,7 @@
+node_modules/
+.cortex/
+vault/
+*.log
+.DS_Store
+*.db
+*.db-*

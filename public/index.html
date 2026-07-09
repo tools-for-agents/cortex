@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>cortex — second brain</title>
+<style>
+  :root {
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2230; --line:#2a3240; --edge:#33405a;
+    --text:#e6edf3; --dim:#8b98a9; --accent:#7aa2f7; --accent2:#bb9af7;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; overflow:hidden; }
+  #top { position:fixed; top:0; left:0; right:0; height:52px; display:flex; align-items:center; gap:14px;
+    padding:0 16px; background:linear-gradient(180deg,rgba(22,27,34,.96),rgba(22,27,34,.82)); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line); z-index:10; }
+  #top .brand { font-weight:700; letter-spacing:.3px; }
+  #top .brand span { color:var(--accent2); }
+  #top .count { color:var(--dim); font-size:12.5px; }
+  #search { flex:1; max-width:420px; }
+  #search input { width:100%; padding:8px 12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); outline:none; }
+  #search input:focus { border-color:var(--accent); }
+  button.tb { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px;
+    padding:7px 12px; cursor:pointer; font-size:13px; }
+  button.tb:hover { border-color:var(--accent); }
+  canvas { position:fixed; inset:52px 0 0 0; display:block; cursor:grab; }
+  canvas.grabbing { cursor:grabbing; }
+  #results { position:fixed; top:60px; left:16px; width:320px; max-height:60vh; overflow:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:6px; display:none; z-index:9;
+    box-shadow:0 12px 40px rgba(0,0,0,.4); }
+  #results .r { padding:8px 10px; border-radius:7px; cursor:pointer; }
+  #results .r:hover { background:var(--panel2); }
+  #results .r b { color:var(--accent); font-weight:600; }
+  #results .r small { color:var(--dim); }
+  #legend { position:fixed; left:16px; bottom:16px; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:10px 12px; font-size:12px; z-index:8; }
+  #legend .row { display:flex; align-items:center; gap:8px; margin:3px 0; color:var(--dim); }
+  #legend .dot { width:10px; height:10px; border-radius:50%; }
+  #panel { position:fixed; top:52px; right:0; bottom:0; width:min(460px,90vw); background:var(--panel);
+    border-left:1px solid var(--line); transform:translateX(100%); transition:transform .18s ease; z-index:11;
+    overflow:auto; padding:22px 24px; }
+  #panel.open { transform:none; }
+  #panel h1 { font-size:20px; margin:0 0 4px; }
+  #panel .meta { color:var(--dim); font-size:12.5px; margin-bottom:14px; }
+  #panel .tag { display:inline-block; background:var(--panel2); border:1px solid var(--line); color:var(--accent2);
+    border-radius:20px; padding:1px 9px; font-size:11.5px; margin:0 5px 5px 0; }
+  #panel .body { white-space:normal; }
+  #panel .body h2 { font-size:16px; border-bottom:1px solid var(--line); padding-bottom:4px; margin:18px 0 8px; }
+  #panel .body h3 { font-size:14.5px; margin:14px 0 6px; }
+  #panel .body a { color:var(--accent); }
+  #panel .body a.wl { color:var(--accent2); text-decoration:none; border-bottom:1px dashed var(--accent2); cursor:pointer; }
+  #panel .body code { background:var(--panel2); padding:1px 5px; border-radius:4px; font-size:12.5px; }
+  #panel .body pre { background:var(--panel2); padding:12px; border-radius:8px; overflow:auto; }
+  #panel .x { position:absolute; top:14px; right:16px; color:var(--dim); cursor:pointer; font-size:20px; }
+  #panel .x:hover { color:var(--text); }
+  #hint { position:fixed; right:16px; bottom:16px; color:var(--dim); font-size:11.5px; z-index:8; }
+</style>
+</head>
+<body>
+  <div id="top">
+    <div class="brand">🧠 cor<span>tex</span></div>
+    <div class="count" id="count">—</div>
+    <div id="search"><input id="q" placeholder="search your brain…  (/ to focus)" autocomplete="off" /></div>
+    <button class="tb" id="syncBtn" title="Re-scan the vault folder">sync</button>
+  </div>
+  <canvas id="c"></canvas>
+  <div id="results"></div>
+  <div id="legend"></div>
+  <div id="hint">drag node · scroll zoom · click to read</div>
+  <div id="panel"><span class="x" id="panelX">×</span><div id="panelContent"></div></div>
+
+<script>
+const TYPE_COLORS = { concept:'#7aa2f7', entity:'#7ee787', source:'#e3b341', synthesis:'#bb9af7',
+  daily:'#8b98a9', person:'#f778ba', project:'#ff8f5e', note:'#79c0ff' };
+const colorOf = t => TYPE_COLORS[t] || '#56d4dd';
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let W, H, DPR = window.devicePixelRatio || 1;
+function resize(){ W = cv.clientWidth; H = cv.clientHeight; cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
+window.addEventListener('resize', resize);
+
+let nodes = [], edges = [], byId = new Map();
+let view = { x: 0, y: 0, scale: 1 };
+let alpha = 1, hovered = null, selected = null, dragging = null, panning = false;
+const nbr = new Map(); // adjacency for highlight
+
+async function load(){
+  const g = await (await fetch('/api/graph')).json();
+  const prev = byId;
+  nodes = g.nodes.map(n => { const p = prev.get(n.id); return { ...n,
+    x: p ? p.x : (W/2 + (Math.random()-.5)*300), y: p ? p.y : (H/2 + (Math.random()-.5)*300),
+    vx:0, vy:0, r: 4 + Math.sqrt(n.deg)*2.4 }; });
+  byId = new Map(nodes.map(n => [n.id, n]));
+  edges = g.edges.filter(e => byId.has(e.source) && byId.has(e.target))
+    .map(e => ({ s: byId.get(e.source), t: byId.get(e.target) }));
+  nbr.clear();
+  for (const e of edges){ (nbr.get(e.s.id) || nbr.set(e.s.id,new Set()).get(e.s.id)).add(e.t.id);
+    (nbr.get(e.t.id) || nbr.set(e.t.id,new Set()).get(e.t.id)).add(e.s.id); }
+  document.getElementById('count').textContent = `${g.stats.notes} notes · ${g.stats.links} links`;
+  buildLegend();
+  alpha = 1;
+}
+function buildLegend(){
+  const types = [...new Set(nodes.map(n=>n.type))];
+  document.getElementById('legend').innerHTML = types.map(t =>
+    `<div class="row"><span class="dot" style="background:${colorOf(t)}"></span>${t}</div>`).join('') || '';
+}
+
+// ── force simulation ──────────────────────────────────────────────────────────
+function tick(){
+  if (alpha > 0.005){
+    const REP = 5200, LINK = 0.028, LEN = 68, GRAV = 0.025, DAMP = 0.86;
+    for (let i=0;i<nodes.length;i++){
+      const a = nodes[i];
+      for (let j=i+1;j<nodes.length;j++){
+        const b = nodes[j];
+        let dx = a.x-b.x, dy = a.y-b.y, d2 = dx*dx+dy*dy || 0.01;
+        if (d2 > 90000) continue;
+        const d = Math.sqrt(d2), f = REP/d2*alpha;
+        const fx = dx/d*f, fy = dy/d*f;
+        a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+      }
+    }
+    for (const e of edges){
+      let dx = e.t.x-e.s.x, dy = e.t.y-e.s.y, d = Math.hypot(dx,dy)||0.01;
+      const f = (d-LEN)*LINK*alpha;
+      const fx = dx/d*f, fy = dy/d*f;
+      e.s.vx += fx; e.s.vy += fy; e.t.vx -= fx; e.t.vy -= fy;
+    }
+    const cx = W/2, cy = H/2;
+    for (const n of nodes){
+      if (n === dragging) continue;
+      n.vx += (cx-n.x)*GRAV*alpha; n.vy += (cy-n.y)*GRAV*alpha;
+      n.vx *= DAMP; n.vy *= DAMP;
+      n.x += n.vx; n.y += n.vy;
+    }
+    alpha *= 0.985;
+  }
+  render();
+  requestAnimationFrame(tick);
+}
+
+function toScreen(n){ return { x: n.x*view.scale+view.x, y: n.y*view.scale+view.y }; }
+function toWorld(px,py){ return { x:(px-view.x)/view.scale, y:(py-view.y)/view.scale }; }
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  const hi = hovered || selected;
+  const active = hi ? nbr.get(hi.id) || new Set() : null;
+  // edges
+  ctx.lineWidth = 1;
+  for (const e of edges){
+    const s = toScreen(e.s), t = toScreen(e.t);
+    const on = hi && (e.s===hi||e.t===hi);
+    ctx.strokeStyle = on ? 'rgba(122,162,247,.85)' : (hi ? 'rgba(51,64,90,.25)' : 'rgba(51,64,90,.6)');
+    ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(t.x,t.y); ctx.stroke();
+  }
+  // nodes
+  for (const n of nodes){
+    const p = toScreen(n), r = Math.max(2, n.r*view.scale);
+    const faded = hi && n!==hi && !(active&&active.has(n.id));
+    ctx.globalAlpha = faded ? 0.28 : 1;
+    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,7); ctx.fillStyle = colorOf(n.type); ctx.fill();
+    if (n===selected || n===hovered){ ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
+    ctx.globalAlpha = 1;
+    const showLabel = (!hi && (n.deg>=2 && view.scale>0.7)) || n===hi || (active&&active.has(n.id));
+    if (showLabel && view.scale>0.45){
+      ctx.font = `${Math.min(13, 9+n.deg)}px -apple-system,sans-serif`;
+      ctx.fillStyle = faded ? 'rgba(139,152,169,.4)' : '#c9d4e2';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.title.slice(0,28), p.x, p.y - r - 4);
+    }
+  }
+}
+
+// ── picking + interaction ─────────────────────────────────────────────────────
+function nodeAt(px,py){
+  const w = toWorld(px,py);
+  let best = null, bd = 1e9;
+  for (const n of nodes){ const d = Math.hypot(n.x-w.x, n.y-w.y); if (d < Math.max(8,n.r+4) && d < bd){ bd=d; best=n; } }
+  return best;
+}
+cv.addEventListener('mousemove', e => {
+  const px = e.clientX, py = e.clientY-52;
+  if (dragging){ const w = toWorld(px,py); dragging.x=w.x; dragging.y=w.y; dragging.vx=0; dragging.vy=0; alpha=Math.max(alpha,.3); return; }
+  if (panning){ view.x += e.movementX; view.y += e.movementY; return; }
+  hovered = nodeAt(px,py);
+  cv.style.cursor = hovered ? 'pointer' : 'grab';
+});
+cv.addEventListener('mousedown', e => {
+  const n = nodeAt(e.clientX, e.clientY-52);
+  if (n){ dragging = n; } else { panning = true; cv.classList.add('grabbing'); }
+});
+window.addEventListener('mouseup', e => {
+  if (dragging && Math.abs(e.movementX)<3){ /* click-ish */ }
+  dragging = null; panning = false; cv.classList.remove('grabbing');
+});
+cv.addEventListener('click', e => { const n = nodeAt(e.clientX, e.clientY-52); if (n) openNote(n.id); });
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY < 0 ? 1.1 : 0.9;
+  const mx = e.clientX, my = e.clientY-52;
+  const w = toWorld(mx,my);
+  view.scale = Math.min(4, Math.max(0.15, view.scale*f));
+  view.x = mx - w.x*view.scale; view.y = my - w.y*view.scale;
+}, { passive:false });
+
+// ── note panel ─────────────────────────────────────────────────────────────────
+function esc(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function renderMd(md){
+  const lines = esc(md).split('\n'); let html = '', inCode = false;
+  for (let ln of lines){
+    if (/^```/.test(ln)){ html += inCode ? '</pre>' : '<pre>'; inCode = !inCode; continue; }
+    if (inCode){ html += ln + '\n'; continue; }
+    ln = ln.replace(/\[\[([^\]|#]+)(?:[^\]]*)\]\]/g, (m,t)=>`<a class="wl" data-slug="${t.trim()}">${t.trim()}</a>`)
+           .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+           .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>')
+           .replace(/`([^`]+)`/g, '<code>$1</code>');
+    if (/^###\s/.test(ln)) html += `<h3>${ln.replace(/^###\s/,'')}</h3>`;
+    else if (/^##\s/.test(ln)) html += `<h2>${ln.replace(/^##\s/,'')}</h2>`;
+    else if (/^#\s/.test(ln)) html += `<h2>${ln.replace(/^#\s/,'')}</h2>`;
+    else if (/^[-*]\s/.test(ln)) html += `<div>• ${ln.replace(/^[-*]\s/,'')}</div>`;
+    else if (/^>\s/.test(ln)) html += `<blockquote style="color:var(--dim);border-left:2px solid var(--line);padding-left:10px">${ln.replace(/^>\s/,'')}</blockquote>`;
+    else if (ln.trim()==='') html += '<div style="height:8px"></div>';
+    else html += `<div>${ln}</div>`;
+  }
+  return html;
+}
+async function openNote(slug){
+  const n = await (await fetch('/api/note?slug='+encodeURIComponent(slug))).json();
+  if (n.error){ return; }
+  selected = byId.get(n.slug) || null;
+  if (selected){ view.scale = Math.max(view.scale, 1.1);
+    view.x = W/2 - selected.x*view.scale; view.y = H/2 - selected.y*view.scale; }
+  document.getElementById('panelContent').innerHTML =
+    `<h1>${esc(n.title)}</h1>
+     <div class="meta">${n.type} · ${n.backlinks} backlinks · ${n.path}</div>
+     <div>${(n.tags||[]).map(t=>`<span class="tag">#${esc(t)}</span>`).join('')}</div>
+     <div class="body">${renderMd(n.body||'')}</div>`;
+  document.getElementById('panel').classList.add('open');
+  document.querySelectorAll('#panelContent a.wl').forEach(a =>
+    a.addEventListener('click', () => openNote(a.dataset.slug)));
+}
+document.getElementById('panelX').onclick = () => { document.getElementById('panel').classList.remove('open'); selected=null; };
+
+// ── search ─────────────────────────────────────────────────────────────────────
+const qEl = document.getElementById('q'), resEl = document.getElementById('results');
+let searchT;
+qEl.addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(doSearch, 160); });
+async function doSearch(){
+  const q = qEl.value.trim();
+  if (!q){ resEl.style.display='none'; return; }
+  const r = await (await fetch('/api/search?q='+encodeURIComponent(q))).json();
+  resEl.innerHTML = (r.results||[]).map(x =>
+    `<div class="r" data-slug="${x.slug}"><b>${esc(x.title)}</b> <small>${x.type}</small><br><small>${esc(x.excerpt||'').slice(0,90)}</small></div>`).join('')
+    || '<div class="r"><small>no matches</small></div>';
+  resEl.style.display='block';
+  resEl.querySelectorAll('.r[data-slug]').forEach(el =>
+    el.addEventListener('click', () => { resEl.style.display='none'; qEl.value=''; openNote(el.dataset.slug); }));
+}
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement !== qEl){ e.preventDefault(); qEl.focus(); }
+  if (e.key === 'Escape'){ resEl.style.display='none'; document.getElementById('panel').classList.remove('open'); }
+});
+document.getElementById('syncBtn').onclick = async () => { await fetch('/api/sync'); await load(); };
+
+resize(); load().then(() => requestAnimationFrame(tick));
+</script>
+</body>
+</html>
