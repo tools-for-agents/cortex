@@ -1,5 +1,7 @@
 # 🧠 cortex
 
+[![ci](https://github.com/tools-for-agents/cortex/actions/workflows/ci.yml/badge.svg)](https://github.com/tools-for-agents/cortex/actions/workflows/ci.yml)
+
 **A local, Obsidian-compatible second brain for agents.**
 
 An agent that re-derives the same facts every session is spending tokens to stay ignorant. `cortex` gives it a **durable, wikilinked knowledge base** on disk: it distils what it learns into small interconnected markdown notes, then recalls *just enough* of them later. Notes link to each other with `[[wikilinks]]`, so the brain becomes a **graph** you can traverse — backlinks, related notes, hubs, orphans — not a flat pile of memories.
