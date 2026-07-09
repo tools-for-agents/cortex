@@ -158,7 +158,7 @@
 </div>
 
 <div id="legend"></div>
-<div id="hint" class="mono">hover to trace · click to read · scroll to zoom · drag to move</div>
+<div id="hint" class="mono">hover to trace · click to read · drag to pin · scroll to zoom</div>
 <div id="tagfilter"></div>
 <div id="tip"></div>
 <aside id="panel"><div class="close" id="px" role="button" aria-label="Close">×</div><div id="pb"></div></aside>
@@ -174,7 +174,8 @@ function applyGraph(g,keep){
   const prev=bySlug,selId=selected?selected.id:null;
   nodes=(g.nodes||[]).map((n,i)=>{const p=keep&&prev.get(n.id),a=i*2.399963,r=8+Math.sqrt(i)*16;
     return {id:n.id,title:n.title||n.id,type:n.type||"note",tags:n.tags||[],deg:0,ghost:!!n.ghost||n.type==="ghost",
-      x:p?p.x:Math.cos(a)*r,y:p?p.y:Math.sin(a)*r,vx:0,vy:0,hi:p?p.hi:1,sc:p?p.sc:1};});
+      pinned:p?!!p.pinned:false,x:p?p.x:Math.cos(a)*r,y:p?p.y:Math.sin(a)*r,vx:0,vy:0,hi:p?p.hi:1,sc:p?p.sc:1};});
+  if(!keep){const pins=loadPins();for(const n of nodes)if(pins[n.id]){n.x=pins[n.id][0];n.y=pins[n.id][1];n.pinned=true;}}
   bySlug=new Map(nodes.map(n=>[n.id,n]));
   edges=(g.edges||[]).filter(e=>bySlug.has(e.source)&&bySlug.has(e.target)).map(e=>({s:bySlug.get(e.source),t:bySlug.get(e.target)}));
   nbr=new Map();nodes.forEach(n=>nbr.set(n.id,new Set()));
@@ -191,6 +192,9 @@ function applyGraph(g,keep){
 }
 async function loadGraph(){let g;try{g=await (await fetch("/api/graph")).json();}catch(e){g={nodes:[],edges:[]};}applyGraph(g,false);}
 async function refreshGraph(){let g;try{g=await (await fetch("/api/graph")).json();}catch(e){return;}applyGraph(g,true);alpha=Math.max(alpha,0.6);}
+// pinned layout: drag a node to pin it in place; positions persist across reloads
+function savePins(){try{const p={};for(const n of nodes)if(n.pinned&&!n.ghost)p[n.id]=[Math.round(n.x),Math.round(n.y)];localStorage.setItem("cortex:pins",JSON.stringify(p));}catch(e){}}
+function loadPins(){try{return JSON.parse(localStorage.getItem("cortex:pins")||"{}");}catch(e){return {};}}
 
 // ── canvas + palette ─────────────────────────────────────────────────────────
 const cv=document.getElementById("c"), ctx=cv.getContext("2d");
@@ -219,7 +223,7 @@ function step(){const REP=680,LINK=0.045,LEN=64,GRAV=0.044,DAMP=0.86;
     for(let j=i+1;j<nodes.length;j++){const b=nodes[j];let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy||0.01;if(d2>90000)continue;
       const d=Math.sqrt(d2),f=REP/d2*alpha*(1+(a.deg+b.deg)*0.05),fx=dx/d*f,fy=dy/d*f;a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;}}
   for(const e of edges){let dx=e.t.x-e.s.x,dy=e.t.y-e.s.y,d=Math.hypot(dx,dy)||0.01;const f=(d-LEN)*LINK*alpha,fx=dx/d*f,fy=dy/d*f;e.s.vx+=fx;e.s.vy+=fy;e.t.vx-=fx;e.t.vy-=fy;}
-  for(const n of nodes){if(n===dragging)continue;n.vx+=(-n.x)*GRAV*alpha;n.vy+=(-n.y)*GRAV*alpha;n.vx*=DAMP;n.vy*=DAMP;n.x+=n.vx;n.y+=n.vy;}
+  for(const n of nodes){if(n===dragging||n.pinned)continue;n.vx+=(-n.x)*GRAV*alpha;n.vy+=(-n.y)*GRAV*alpha;n.vx*=DAMP;n.vy*=DAMP;n.x+=n.vx;n.y+=n.vy;}
   alpha*=0.985;}
 function fit(pad,animate){const narrow=W<680;pad=pad??Math.max(44,Math.min(W,H)*(narrow?0.08:0.09));
   let a=1e9,b=1e9,c=-1e9,d=-1e9;
@@ -292,6 +296,7 @@ function render(){
       const wm=n===hovered?(isDark?0.82:0.6):(isDark?0.55:0.35);
       const cg=ctx.createRadialGradient(n._x-r*0.3,n._y-r*0.3,0,n._x,n._y,r);cg.addColorStop(0,mixWhite(col,wm));cg.addColorStop(1,col);
       ctx.fillStyle=cg;ctx.beginPath();ctx.arc(n._x,n._y,r,0,7);ctx.fill();ctx.shadowBlur=0;}
+    if(n.pinned&&n!==selected){ctx.globalAlpha=0.5;ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(n._x,n._y,r+3.5,0,7);ctx.stroke();}
     if(n===selected){const pu=reduceMotion?1:1+Math.sin(performance.now()/400)*0.1;ctx.globalAlpha=0.92;ctx.strokeStyle=isDark?"#fff":col;ctx.lineWidth=2;ctx.beginPath();ctx.arc(n._x,n._y,(r+6)*pu,0,7);ctx.stroke();}
     if(n===hovered&&n!==selected){ctx.globalAlpha=0.8;ctx.strokeStyle=isDark?"#fff":col;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(n._x,n._y,r+4,0,7);ctx.stroke();}}
   ctx.globalAlpha=1;
@@ -355,10 +360,13 @@ cv.addEventListener("mousemove",e=>{
 cv.addEventListener("mouseleave",()=>{hovered=null;tip.style.display="none";});
 cv.addEventListener("mousedown",e=>{markUsed();downX=e.clientX;downY=e.clientY;const n=nodeAt(e.clientX,e.clientY);if(n)pendingDrag=n;else{panning=true;cv.classList.add("drag");}});
 addEventListener("mouseup",e=>{
-  if(!dragging){if(pendingDrag){if(!pendingDrag.ghost)openNote(pendingDrag.id);}
-    else if(Math.hypot(e.clientX-downX,e.clientY-downY)<5){closePanel();hovered=null;}}
+  if(dragging){dragging.pinned=true;savePins();}
+  else if(pendingDrag){if(!pendingDrag.ghost)openNote(pendingDrag.id);}
+  else if(Math.hypot(e.clientX-downX,e.clientY-downY)<5){closePanel();hovered=null;}
   pendingDrag=null;dragging=null;panning=false;cv.classList.remove("drag");});
-cv.addEventListener("dblclick",e=>{const n=nodeAt(e.clientX,e.clientY);if(n){markUsed();zoomTo(n);}});
+cv.addEventListener("dblclick",e=>{const n=nodeAt(e.clientX,e.clientY);markUsed();
+  if(!n){let any=false;for(const m of nodes)if(m.pinned){m.pinned=false;any=true;}if(any){savePins();alpha=Math.max(alpha,0.6);}return;}
+  if(n.pinned){n.pinned=false;savePins();alpha=Math.max(alpha,0.5);}else zoomTo(n);});
 cv.addEventListener("wheel",e=>{e.preventDefault();markUsed();
   const f=Math.min(1.16,Math.max(0.86,Math.exp(-e.deltaY*0.0012)));const w=toWorld(e.clientX,e.clientY);
   view.k=Math.max(0.35,Math.min(4.5,view.k*f));const p=S({x:w.x,y:w.y});view.x+=e.clientX-p.x;view.y+=e.clientY-p.y;},{passive:false});
@@ -368,7 +376,7 @@ cv.addEventListener("touchmove",e=>{
   const t=e.touches[0];
   if(pendingDrag||dragging){if(pendingDrag&&Math.hypot(t.clientX-downX,t.clientY-downY)>8){dragging=pendingDrag;pendingDrag=null;}if(dragging){const w=toWorld(t.clientX,t.clientY);dragging.x=w.x;dragging.y=w.y;alpha=Math.max(alpha,0.5);}}
   else if(panning){view.x+=t.clientX-downX;view.y+=t.clientY-downY;downX=t.clientX;downY=t.clientY;}},{passive:true});
-cv.addEventListener("touchend",e=>{pinchD=0;if(!dragging&&pendingDrag&&!pendingDrag.ghost)openNote(pendingDrag.id);pendingDrag=null;dragging=null;panning=false;},{passive:true});
+cv.addEventListener("touchend",e=>{pinchD=0;if(dragging){dragging.pinned=true;savePins();}else if(pendingDrag&&!pendingDrag.ghost)openNote(pendingDrag.id);pendingDrag=null;dragging=null;panning=false;},{passive:true});
 
 function zoomTo(n){view.k=Math.min(2.4,Math.max(view.k,1.7));const pw=innerWidth>680&&panel.classList.contains("open")?Math.min(452,innerWidth*0.93):0;panTo={x:-pw/2-n.x*view.k,y:-n.y*view.k};}
 // Only recenter when the clicked node would be hidden behind the panel or is near
