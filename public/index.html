@@ -159,18 +159,18 @@ const TYPE={moc:{label:"map"},project:{label:"tool"},concept:{label:"concept"},s
 const TYPE_COLOR={project:"project",concept:"concept",source:"source",entity:"entity",moc:"moc",note:"concept",synthesis:"entity",person:"moc",daily:"concept",area:"source"};
 // ── data: fetched live from the cortex server ────────────────────────────────
 const slug=s=>String(s).toLowerCase().trim();
-let nodes=[],edges=[],bySlug=new Map(),nbr=new Map(),resolver=new Map(),typeCounts={},maxDeg=1,realCount=0;
+let nodes=[],edges=[],bySlug=new Map(),nbr=new Map(),resolver=new Map(),typeCounts={},maxDeg=1,realCount=0,ghostCount=0;
 async function loadGraph(){
   let g;try{g=await (await fetch("/api/graph")).json();}catch(e){g={nodes:[],edges:[]};}
-  nodes=(g.nodes||[]).map(n=>({id:n.id,title:n.title||n.id,type:n.type||"note",deg:0}));
+  nodes=(g.nodes||[]).map(n=>({id:n.id,title:n.title||n.id,type:n.type||"note",deg:0,ghost:!!n.ghost||n.type==="ghost"}));
   bySlug=new Map(nodes.map(n=>[n.id,n]));
   edges=(g.edges||[]).filter(e=>bySlug.has(e.source)&&bySlug.has(e.target)).map(e=>({s:bySlug.get(e.source),t:bySlug.get(e.target)}));
   nbr=new Map();nodes.forEach(n=>nbr.set(n.id,new Set()));
   edges.forEach(e=>{nbr.get(e.s.id).add(e.t.id);nbr.get(e.t.id).add(e.s.id);});
   nodes.forEach(n=>n.deg=nbr.get(n.id).size);
-  realCount=nodes.length;maxDeg=Math.max(1,...nodes.map(n=>n.deg));
+  realCount=nodes.filter(n=>!n.ghost).length;ghostCount=nodes.filter(n=>n.ghost).length;maxDeg=Math.max(1,...nodes.map(n=>n.deg));
   resolver=new Map();typeCounts={};
-  nodes.forEach((n,i)=>{resolver.set(n.id,n.id);resolver.set(slug(n.title),n.id);typeCounts[n.type]=(typeCounts[n.type]||0)+1;n.d0=(1-n.deg/maxDeg)*0.4;const a=i*2.399963,r=8+Math.sqrt(i)*16;n.x=Math.cos(a)*r;n.y=Math.sin(a)*r;n.vx=0;n.vy=0;n.hi=1;n.sc=1;});
+  nodes.forEach((n,i)=>{resolver.set(n.id,n.id);resolver.set(slug(n.title),n.id);if(!n.ghost)typeCounts[n.type]=(typeCounts[n.type]||0)+1;n.d0=(1-n.deg/maxDeg)*0.4;const a=i*2.399963,r=8+Math.sqrt(i)*16;n.x=Math.cos(a)*r;n.y=Math.sin(a)*r;n.vx=0;n.vy=0;n.hi=1;n.sc=1;});
   document.getElementById("nc").textContent=realCount;
   document.getElementById("lc").textContent=edges.length;
   document.getElementById("q").placeholder=`search ${realCount} notes…  ( / )`;
@@ -373,11 +373,11 @@ function renderBody(t){t=t||"";return t.split(/\n{2,}/).map(p=>"<p>"+esc(p)
   .replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\n/g,"<br>")+"</p>").join("");}
 const panel=document.getElementById("panel");
 let navStack=[];
-async function openNote(id,opts){const n=bySlug.get(id);if(!n)return;
+async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
   if(selected&&selected.id!==id&&!(opts&&opts.back))navStack.push(selected.id);
   selected=n;filterType=null;syncLegend();markUsed();centerOn(n);tip.style.display="none";
   const back=edges.filter(e=>e.t===n).map(e=>e.s),fwd=edges.filter(e=>e.s===n).map(e=>e.t);
-  const rows=arr=>arr.map(t=>`<div class="backlink" data-go="${t.id}"><span class="d" style="color:${colorOf(t)};background:${colorOf(t)}"></span>${esc(t.title)}</div>`).join("");
+  const rows=arr=>arr.map(t=>`<div class="backlink" ${t.ghost?'style="cursor:default"':`data-go="${t.id}"`}><span class="d" style="color:${colorOf(t)};background:${colorOf(t)}"></span>${esc(t.title)}${t.ghost?'<span class="u">unwritten</span>':""}</div>`).join("");
   const prev=navStack.length?bySlug.get(navStack[navStack.length-1]):null;
   const backBtn=prev?`<div class="back" id="backBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>back to ${esc(prev.title)}</div>`:"";
   const label=(TYPE[n.type]||{label:n.type}).label;
@@ -451,8 +451,8 @@ addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement!==q){e.pre
 // ── legend (click a type to isolate it) ───────────────────────────────────────
 const legend=document.getElementById("legend");
 function buildLegend(){const order=Object.keys(typeCounts).sort((a,b)=>typeCounts[b]-typeCounts[a]);
-  legend.innerHTML=`<div class="t">node types · click to filter</div>`+order.map(t=>{const c=css("--n-"+(TYPE_COLOR[t]||"concept"));return `<div class="row" data-t="${t}"><span class="g" style="color:${c};background:${c}"></span>${(TYPE[t]?TYPE[t].label:t)}<span class="n">${typeCounts[t]||0}</span></div>`;}).join("");
-  legend.querySelectorAll(".row[data-t]").forEach(el=>{const t=el.dataset.t;el.addEventListener("click",()=>{filterType=filterType===t?null:t;selected&&closePanel();markUsed();syncLegend();});});
+  legend.innerHTML=`<div class="t">node types · click to filter</div>`+order.map(t=>{const c=css("--n-"+(TYPE_COLOR[t]||"concept"));return `<div class="row" data-t="${t}"><span class="g" style="color:${c};background:${c}"></span>${(TYPE[t]?TYPE[t].label:t)}<span class="n">${typeCounts[t]||0}</span></div>`;}).join("")+(ghostCount?`<div class="row" data-t="ghost" style="cursor:default"><span class="g ghost"></span>unwritten<span class="n">${ghostCount}</span></div>`:"");
+  legend.querySelectorAll(".row[data-t]").forEach(el=>{const t=el.dataset.t;if(t==="ghost")return;el.addEventListener("click",()=>{filterType=filterType===t?null:t;selected&&closePanel();markUsed();syncLegend();});});
   syncLegend();}
 function syncLegend(){legend.querySelectorAll(".row[data-t]").forEach(el=>{const t=el.dataset.t;el.classList.toggle("solo",filterType===t);el.classList.toggle("off",filterType&&filterType!==t&&t!=="ghost");});}
 

@@ -315,7 +315,14 @@ export function graphData() {
     .map((n) => ({ id: n.slug, title: n.title, type: n.type, deg: deg[n.slug] || 0 }));
   const edges = all('SELECT src, dst FROM links WHERE dst IS NOT NULL')
     .map((e) => ({ source: e.src, target: e.dst }));
-  return { nodes, edges, stats: { notes: nodes.length, links: edges.length } };
+  // broken links become "unwritten" ghost nodes — notes worth creating
+  const have = new Set(nodes.map((n) => n.id));
+  for (const r of all('SELECT src, target FROM links WHERE dst IS NULL')) {
+    const id = `ghost:${slugify(r.target)}`;
+    if (!have.has(id)) { have.add(id); nodes.push({ id, title: r.target, type: 'ghost', ghost: true, deg: 0 }); }
+    edges.push({ source: r.src, target: id });
+  }
+  return { nodes, edges, stats: { notes: nodes.filter((n) => !n.ghost).length, links: edges.length } };
 }
 
 // ── daily note: append a timestamped bullet to today's journal ────────────────
