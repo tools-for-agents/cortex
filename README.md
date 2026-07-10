@@ -83,6 +83,7 @@ Vault location: `$CORTEX_VAULT` (default `./vault`).
 
 - **Hover** any note to trace its neighbourhood — connected notes light up with energy flowing along the links, everything else dims.
 - **Click** a note to read it in a side panel (fetched live): its body with clickable `[[wikilinks]]`, its tags, and its *links to* / *linked from* lists — navigate note-to-note with a back button.
+- **Related notes** — the panel also surfaces notes that share a tag but *aren't linked yet* (ranked by shared-tag count), each showing the tag they have in common — the latent connections worth writing, so your second brain keeps knitting itself together.
 - **Search** from the top bar (ranked dropdown, keyboard-navigable), **filter** by type from the legend, click the stat for a **graph overview** (hubs, type breakdown).
 - Drag to rearrange, scroll/pinch to zoom, recenter, and a light/dark theme toggle.
 - **Minimap** — a small overview of the whole brain sits in the top-left, with a rectangle marking the part you're looking at; click or drag on it to fly across a large graph without losing your place.

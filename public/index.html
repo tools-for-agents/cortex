@@ -112,6 +112,7 @@
   .backlink:hover{background:var(--card);color:var(--ink);}
   .backlink .d{width:8px;height:8px;border-radius:50%;flex:none;box-shadow:0 0 8px currentColor;}
   .backlink .u{margin-left:auto;font-size:9.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.12em;}
+  .backlink .via{margin-left:auto;font-size:10px;color:var(--accent-2);white-space:nowrap;font-family:var(--mono,ui-monospace);}
 
   #tip{position:fixed;z-index:25;pointer-events:none;display:none;padding:8px 12px;border-radius:11px;background:var(--panel-solid);border:1px solid var(--line);box-shadow:var(--shadow);white-space:nowrap;transform:translate(-50%,calc(-100% - 14px));}
   #tip .tt{font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px;}
@@ -479,16 +480,27 @@ async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
   selected=n;filterType=null;filterTag=null;syncLegend();syncTagFilter();markUsed();centerOn(n);tip.style.display="none";
   const back=edges.filter(e=>e.t===n).map(e=>e.s),fwd=edges.filter(e=>e.s===n).map(e=>e.t);
   const rows=arr=>arr.map(t=>`<div class="backlink" ${t.ghost?'style="cursor:default"':`data-go="${t.id}"`}><span class="d" style="color:${colorOf(t)};background:${colorOf(t)}"></span>${esc(t.title)}${t.ghost?'<span class="u">unwritten</span>':""}</div>`).join("");
+  // Related-by-shared-tags: real notes that share a tag but aren't already linked — latent
+  // connections worth making (the second-brain "you might also connect these" surface).
+  const linked=new Set([n.id,...fwd.map(x=>x.id),...back.map(x=>x.id)]);
+  const mytags=new Set(n.tags||[]);
+  const related=mytags.size?nodes.filter(m=>!m.ghost&&!linked.has(m.id))
+    .map(m=>({node:m,shared:(m.tags||[]).filter(t=>mytags.has(t))}))
+    .filter(r=>r.shared.length)
+    .sort((a,b)=>b.shared.length-a.shared.length||b.node.deg-a.node.deg)
+    .slice(0,5):[];
+  const relRows=related.map(r=>`<div class="backlink" data-go="${r.node.id}"><span class="d" style="color:${colorOf(r.node)};background:${colorOf(r.node)}"></span>${esc(r.node.title)}<span class="via">${r.shared.slice(0,2).map(s=>"#"+esc(s)).join(" ")}${r.shared.length>2?" +"+(r.shared.length-2):""}</span></div>`).join("");
   const prev=navStack.length?bySlug.get(navStack[navStack.length-1]):null;
   const backBtn=prev?`<div class="back" id="backBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>back to ${esc(prev.title)}</div>`:"";
   const label=(TYPE[n.type]||{label:n.type}).label;
   document.getElementById("pb").innerHTML=
     `${backBtn}<div class="kicker mono" style="color:${colorOf(n)}">${label}</div>
      <h1>${esc(n.title)}</h1>
-     <div class="chips" id="chips"><span class="chip type" style="background:${colorOf(n)}">${label}</span><span class="chip">${back.length} backlinks</span><span class="chip">${fwd.length} links out</span></div>
+     <div class="chips" id="chips"><span class="chip type" style="background:${colorOf(n)}">${label}</span><span class="chip">${back.length} backlinks</span><span class="chip">${fwd.length} links out</span>${related.length?`<span class="chip">${related.length} related</span>`:""}</div>
      <div class="body" id="noteBody">…</div>
      ${fwd.length?`<div class="meta"><div class="t">Links to</div>${rows(fwd)}</div>`:""}
-     ${back.length?`<div class="meta"><div class="t">Linked from</div>${rows(back)}</div>`:""}`;
+     ${back.length?`<div class="meta"><div class="t">Linked from</div>${rows(back)}</div>`:""}
+     ${related.length?`<div class="meta"><div class="t">Related · shared tags</div>${relRows}</div>`:""}`;
   panel.classList.add("open");panel.scrollTop=0;
   const bb=document.getElementById("backBtn");if(bb)bb.addEventListener("click",goBack);
   wireRows();
