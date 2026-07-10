@@ -77,6 +77,8 @@ Vault location: `$CORTEX_VAULT` (default `./vault`).
 
 ## Web view
 
+![cortex serve — the knowledge-graph explorer: notes linked into a force-directed graph](docs/web-view.png)
+
 `cortex serve` starts a **zero-dependency** web app at `http://localhost:7800` — a premium, Obsidian-style **knowledge graph** of your vault rendered on canvas: glowing nodes (sized by connections, coloured by type) joined by `[[wikilink]]` synapses.
 
 - **Hover** any note to trace its neighbourhood — connected notes light up with energy flowing along the links, everything else dims.
