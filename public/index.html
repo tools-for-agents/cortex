@@ -514,7 +514,10 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme)
 
 // ── boot ──────────────────────────────────────────────────────────────────────
 resize();applyTheme();
-(async()=>{await loadGraph();alpha=1;for(let i=0;i<420;i++)step();alpha=0;fit();if(reduceMotion)intro=1;requestAnimationFrame(frame);})();
+(async()=>{await loadGraph();alpha=1;for(let i=0;i<420;i++)step();alpha=0;fit();if(reduceMotion)intro=1;requestAnimationFrame(frame);openFromHash();})();
+// deep-link: open a note by slug from the URL hash (e.g. "#recall"), so other tools can link straight to it
+function openFromHash(){const s=decodeURIComponent(location.hash.slice(1));if(s&&bySlug.has(s)&&!bySlug.get(s).ghost)openNote(s);}
+addEventListener("hashchange",openFromHash);
 // live refresh: re-fetch the graph when the server signals a vault change (keeps positions, gently re-settles)
 try{const es=new EventSource("/api/events");es.onmessage=()=>refreshGraph();}catch(e){}
 
