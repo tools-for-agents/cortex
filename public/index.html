@@ -126,6 +126,16 @@
   #tagfilter{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:10px;padding:6px 7px 6px 14px;border-radius:100px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:var(--shadow);font-size:12.5px;color:var(--ink-dim);cursor:pointer;}
   #tagfilter b{color:var(--accent-2);font-weight:600;}
   #tagfilter .x{width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:var(--card);color:var(--ink-dim);font-size:10px;}
+  #controls button.on{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 55%,var(--line));background:color-mix(in srgb,var(--accent-2) 14%,var(--ctrl));}
+  #pathbar{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:10px;max-width:min(560px,92vw);padding:6px 7px 6px 14px;border-radius:100px;background:var(--panel);border:1px solid color-mix(in srgb,var(--accent-2) 40%,var(--line));backdrop-filter:blur(14px);box-shadow:var(--shadow);font-size:12.5px;color:var(--ink-dim);}
+  #pathbar.show{display:flex;}
+  #pathbar .pb-ico{color:var(--accent-2);font-size:15px;flex:none;}
+  #pathbar #pathbar-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #pathbar #pathbar-txt b{color:var(--ink);font-weight:650;}
+  #pathbar #pathbar-txt .hops{color:var(--accent-2);font-variant-numeric:tabular-nums;}
+  #pathbar #pathbar-txt .none{color:var(--n-moc);}
+  #pathbar .x{flex:none;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;background:var(--card);border:none;color:var(--ink-dim);font-size:10px;cursor:pointer;}
+  #pathbar .x:hover{color:var(--ink);}
   #tagfilter:hover .x{color:var(--ink);}
   .chip.tag:hover{border-color:var(--accent-2);color:var(--accent-2);}
   .tagcloud{display:flex;flex-wrap:wrap;gap:7px;}
@@ -174,12 +184,14 @@
   <div class="sep"></div>
   <button data-act="fit" title="Recenter (0)" aria-label="Recenter"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9V4h5M21 9V4h-5M3 15v5h5M21 15v5h-5"/></svg></button>
   <button data-act="theme" title="Toggle theme" aria-label="Toggle theme"><svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4l1.4-1.4M18 6l1.4-1.4"/></svg></button>
+  <button data-act="path" id="pathBtn" title="Find the path between two notes" aria-label="Find the path between two notes" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="18.5" r="2.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="5.5" r="2.4" fill="currentColor" stroke="none"/><path d="M8 16.2C10 14 10.5 8 16 7"/></svg></button>
   <div class="sep"></div>
   <button data-act="export" title="Download graph as PNG" aria-label="Download graph as PNG"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11M8 11l4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></button>
 </div>
 
 <div id="legend"></div>
 <div id="hint" class="mono">hover to trace · click to read · drag to pin · scroll to zoom</div>
+<div id="pathbar"><span class="pb-ico" aria-hidden="true">⤳</span><span id="pathbar-txt"></span><button id="pathbar-x" class="x" title="Exit path finder" aria-label="Exit path finder">✕</button></div>
 <div id="tagfilter"></div>
 <div id="tip"></div>
 <aside id="panel"><div class="close" id="px" role="button" tabindex="0" aria-label="Close">×</div><div id="pb"></div></aside>
@@ -225,7 +237,7 @@ let PAL={}, isDark=true;
 function readPalette(){const dt=document.documentElement.getAttribute("data-theme");
   isDark=dt?dt==="dark":matchMedia("(prefers-color-scheme: dark)").matches;
   PAL={project:css("--n-project"),concept:css("--n-concept"),source:css("--n-source"),entity:css("--n-entity"),moc:css("--n-moc"),
-    ghost:css("--ink-faint"),ink:css("--ink"),dim:css("--ink-dim"),bg:css("--bg"),bg2:css("--bg-2"),glow:css("--glow"),nebula:css("--nebula"),line:css("--line")};}
+    ghost:css("--ink-faint"),ink:css("--ink"),dim:css("--ink-dim"),bg:css("--bg"),bg2:css("--bg-2"),glow:css("--glow"),nebula:css("--nebula"),line:css("--line"),accent2:css("--accent-2")};}
 const colorOf=n=>PAL[TYPE_COLOR[n.type]||"concept"]||PAL.concept;
 function resize(){W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
 function rgba(c,a){c=c.trim();if(c[0]==="#"){let h=c.slice(1);if(h.length===3)h=h.split("").map(x=>x+x).join("");const n=parseInt(h,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}return c;}
@@ -280,7 +292,7 @@ function render(){
       n._x=cx+(p.x-cx)*ae;n._y=cy+(p.y-cy)*ae;n._a=ae;}
     else{n._x=p.x;n._y=p.y;n._a=1;}}
 
-  const focus=hovered||selected, active=focus?nbr.get(focus.id):null;
+  const focus=hovered||selected, active=focus?nbr.get(focus.id):null, pHi=pathHiSet();
 
   // bloom
   if(isDark){ctx.globalCompositeOperation="lighter";
@@ -292,15 +304,18 @@ function render(){
 
   // links
   ctx.lineCap="round";
-  for(const e of edges){const on=focus&&(e.s===focus||e.t===focus),dim=focus&&!on,vis=Math.min(e.s.hi,e.t.hi)*Math.min(e.s._a,e.t._a);
-    if(on){ctx.strokeStyle=colorOf(focus);ctx.globalAlpha=0.9;ctx.lineWidth=1.8;if(isDark){ctx.shadowColor=colorOf(focus);ctx.shadowBlur=9;}}
+  for(const e of edges){const vis=Math.min(e.s.hi,e.t.hi)*Math.min(e.s._a,e.t._a);
+    let on,dim,col;
+    if(pathState){on=!!pathState.edgeSet&&pathState.edgeSet.has(ek(e));dim=!on;col=PAL.accent2;}
+    else{on=focus&&(e.s===focus||e.t===focus);dim=focus&&!on;col=focus?colorOf(focus):"#888";}
+    if(on){ctx.strokeStyle=col;ctx.globalAlpha=0.92;ctx.lineWidth=pathState?2.6:1.8;if(isDark){ctx.shadowColor=col;ctx.shadowBlur=pathState?13:9;}}
     else{const lg=ctx.createLinearGradient(e.s._x,e.s._y,e.t._x,e.t._y);lg.addColorStop(0,colorOf(e.s));lg.addColorStop(1,colorOf(e.t));
       ctx.strokeStyle=lg;ctx.globalAlpha=(isDark?0.34:0.5)*(dim?0.3:1)*vis;ctx.lineWidth=1;ctx.shadowBlur=0;}
     ctx.beginPath();ctx.moveTo(e.s._x,e.s._y);ctx.lineTo(e.t._x,e.t._y);ctx.stroke();}
   ctx.shadowBlur=0;ctx.globalAlpha=1;
 
   // animated energy travelling along the traced links (flows outward from focus)
-  if(focus&&!focus.ghost&&intro>=1&&!reduceMotion){const now=performance.now()/1000;
+  if(focus&&!focus.ghost&&!pathState&&intro>=1&&!reduceMotion){const now=performance.now()/1000;
     for(const e of edges){if(e.s!==focus&&e.t!==focus)continue;
       const from=e.s===focus?e.s:e.t,to=e.s===focus?e.t:e.s;
       for(let i=0;i<2;i++){const fr=((now*0.55+i*0.5)%1);
@@ -308,6 +323,15 @@ function render(){
         ctx.globalAlpha=Math.sin(fr*Math.PI)*0.9;ctx.fillStyle=colorOf(focus);
         if(isDark){ctx.shadowColor=colorOf(focus);ctx.shadowBlur=8;}
         ctx.beginPath();ctx.arc(x,y,2.5,0,7);ctx.fill();}}
+    ctx.shadowBlur=0;ctx.globalAlpha=1;}
+
+  // a pulse travelling the found path, start → end, so the connection reads as a route
+  if(pathState&&pathState.seq&&pathState.seq.length>1&&intro>=1&&!reduceMotion){const now=performance.now()/1000,seq=pathState.seq;
+    for(let i=0;i<seq.length-1;i++){const from=bySlug.get(seq[i]),to=bySlug.get(seq[i+1]);if(!from||!to)continue;
+      const fr=((now*0.6+i*0.16)%1),x=from._x+(to._x-from._x)*fr,y=from._y+(to._y-from._y)*fr;
+      ctx.globalAlpha=Math.sin(fr*Math.PI)*0.95;ctx.fillStyle=PAL.accent2;
+      if(isDark){ctx.shadowColor=PAL.accent2;ctx.shadowBlur=9;}
+      ctx.beginPath();ctx.arc(x,y,2.8,0,7);ctx.fill();}
     ctx.shadowBlur=0;ctx.globalAlpha=1;}
 
   // cores
@@ -319,12 +343,15 @@ function render(){
       ctx.fillStyle=cg;ctx.beginPath();ctx.arc(n._x,n._y,r,0,7);ctx.fill();ctx.shadowBlur=0;}
     if(n.pinned&&n!==selected){ctx.globalAlpha=0.5;ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(n._x,n._y,r+3.5,0,7);ctx.stroke();}
     if(n===selected){const pu=reduceMotion?1:1+Math.sin(performance.now()/400)*0.1;ctx.globalAlpha=0.92;ctx.strokeStyle=isDark?"#fff":col;ctx.lineWidth=2;ctx.beginPath();ctx.arc(n._x,n._y,(r+6)*pu,0,7);ctx.stroke();}
-    if(n===hovered&&n!==selected){ctx.globalAlpha=0.8;ctx.strokeStyle=isDark?"#fff":col;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(n._x,n._y,r+4,0,7);ctx.stroke();}}
+    if(n===hovered&&n!==selected){ctx.globalAlpha=0.8;ctx.strokeStyle=isDark?"#fff":col;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(n._x,n._y,r+4,0,7);ctx.stroke();}
+    if(pathState&&(pathState.from===n||pathState.to===n)){ctx.globalAlpha=0.95;ctx.strokeStyle=PAL.accent2;ctx.lineWidth=2.4;ctx.beginPath();ctx.arc(n._x,n._y,r+6,0,7);ctx.stroke();}}
   ctx.globalAlpha=1;
 
   // labels
   const cand=[];
-  for(const n of nodes){if(n.ghost&&n!==focus)continue;const isHub=n.deg>=Math.max(5,maxDeg*0.42);
+  for(const n of nodes){const onPath=pHi&&pHi.has(n.id);
+    if(n.ghost&&n!==focus&&!onPath)continue;const isHub=n.deg>=Math.max(5,maxDeg*0.42);
+    if(pHi){if(onPath)cand.push([n,(pathState.from===n||pathState.to===n)?3:2]);continue;}
     if(n===focus)cand.push([n,3]);else if(focus&&active.has(n.id))cand.push([n,2]);
     else if(!focus&&filterType&&n.type===filterType&&n.deg>=2)cand.push([n,2]);
     else if(!focus&&filterTag&&(n.tags||[]).includes(filterTag)&&n.deg>=1)cand.push([n,2]);
@@ -391,9 +418,10 @@ function frame(){
     const dk=panTo.k!==undefined?Math.abs(panTo.k-view.k):0;
     if(Math.abs(panTo.x-view.x)<0.5&&Math.abs(panTo.y-view.y)<0.5&&dk<0.003){view.x=panTo.x;view.y=panTo.y;if(panTo.k!==undefined)view.k=panTo.k;panTo=null;}}
   if(intro<1)intro=Math.min(1,intro+0.018);
-  const focus=hovered||selected;
+  const focus=hovered||selected,pHi=pathHiSet();
   for(const n of nodes){let tgt=1;
-    if(focus)tgt=(n===focus||nbr.get(focus.id).has(n.id))?1:0.13;
+    if(pHi)tgt=pHi.has(n.id)?1:0.09;
+    else if(focus)tgt=(n===focus||nbr.get(focus.id).has(n.id))?1:0.13;
     else if(filterType)tgt=(n.type===filterType)?1:0.11;
     else if(filterTag)tgt=(n.tags||[]).includes(filterTag)?1:0.11;
     n.hi+=(tgt-n.hi)*0.2;const st=(n===hovered)?1.25:1;n.sc+=(st-n.sc)*0.2;}
@@ -403,6 +431,42 @@ function frame(){
 // ── interaction ──────────────────────────────────────────────────────────────
 let hovered=null,selected=null,dragging=null,panning=false,moved=false,downX=0,downY=0,userInteracted=false,panTo=null,filterType=null,filterTag=null;
 function markUsed(){userInteracted=true;panTo=null;const h=document.getElementById("hint");if(h)h.classList.add("gone");}
+
+// ── path finder: BFS shortest path between two notes over the [[wikilink]] graph ──
+let pathMode=false,pathA=null,pathState=null;
+const pairKey=(a,b)=>a<b?a+"|"+b:b+"|"+a;
+const ek=e=>pairKey(e.s.id,e.t.id);
+function bfsPath(a,b){if(a===b)return [a];const prev=new Map([[a,null]]);const q=[a];
+  while(q.length){const cur=q.shift();for(const nx of (nbr.get(cur)||[])){if(prev.has(nx))continue;prev.set(nx,cur);
+    if(nx===b){const seq=[b];let c=b;while((c=prev.get(c))!=null)seq.unshift(c);return seq;}q.push(nx);}}return null;}
+function pathHiSet(){if(!pathState)return null;
+  if(pathState.nodeSet&&pathState.nodeSet.size)return pathState.nodeSet;
+  const s=new Set();if(pathState.from)s.add(pathState.from.id);if(pathState.to)s.add(pathState.to.id);
+  return s.size?s:null;}
+function togglePathMode(){pathMode?exitPathMode():enterPathMode();}
+function enterPathMode(){pathMode=true;pathA=null;pathState=null;selected=null;filterType=null;filterTag=null;
+  closePanel();syncTagFilter();syncLegend();markUsed();
+  const b=document.getElementById("pathBtn");b.classList.add("on");b.setAttribute("aria-pressed","true");renderPathbar();}
+function exitPathMode(){pathMode=false;pathA=null;pathState=null;
+  const b=document.getElementById("pathBtn");b.classList.remove("on");b.setAttribute("aria-pressed","false");
+  document.getElementById("pathbar").classList.remove("show");}
+function pathPick(n){if(!n||n.ghost)return;markUsed();
+  if(!pathA){pathA=n;pathState={picking:true,from:n};renderPathbar();return;}
+  if(n===pathA)return;
+  const seq=bfsPath(pathA.id,n.id);
+  if(seq){const nodeSet=new Set(seq),edgeSet=new Set();for(let i=0;i<seq.length-1;i++)edgeSet.add(pairKey(seq[i],seq[i+1]));
+    pathState={seq,nodeSet,edgeSet,from:pathA,to:n};}
+  else pathState={seq:null,nodeSet:new Set(),edgeSet:new Set(),from:pathA,to:n};
+  pathA=null;renderPathbar();}
+function renderPathbar(){const bar=document.getElementById("pathbar"),txt=document.getElementById("pathbar-txt");
+  if(!pathMode){bar.classList.remove("show");return;}
+  bar.classList.add("show");
+  if(!pathState){txt.innerHTML="click a note to start, then a second to trace the path";return;}
+  if(pathState.picking){txt.innerHTML=`from <b>${esc(pathState.from.title)}</b> · click a second note`;return;}
+  if(!pathState.seq){txt.innerHTML=`<b>${esc(pathState.from.title)}</b> ⇢ <b>${esc(pathState.to.title)}</b> — <span class="none">not connected</span>`;return;}
+  const seq=pathState.seq,hops=seq.length-1,titles=seq.map(id=>(bySlug.get(id)||{}).title||id);
+  const chain=titles.length<=5?titles.map(t=>`<b>${esc(t)}</b>`).join(" → "):`<b>${esc(titles[0])}</b> → … → <b>${esc(titles[titles.length-1])}</b>`;
+  txt.innerHTML=`${chain} · <span class="hops">${hops} hop${hops===1?"":"s"}</span>`;}
 // SCREEN-space hit test with a generous radius (visible node size + 10px, min 16px).
 // The old world-space "/view.k" formula shrank the target below the visible bubble.
 function nodeAt(px,py){let best=null,bd=1e9;for(const n of nodes){const p=S(n),d=Math.hypot(p.x-px,p.y-py),hit=Math.max(16,R(n)*view.k+10);if(d<hit&&d<bd){bd=d;best=n;}}return best;}
@@ -434,8 +498,8 @@ cv.addEventListener("mousedown",e=>{markUsed();downX=e.clientX;downY=e.clientY;
 addEventListener("mouseup",e=>{
   if(miniDrag){miniDrag=false;cv.classList.remove("drag");return;}
   if(dragging){dragging.pinned=true;savePins();}
-  else if(pendingDrag){if(!pendingDrag.ghost)openNote(pendingDrag.id);}
-  else if(Math.hypot(e.clientX-downX,e.clientY-downY)<5){closePanel();hovered=null;}
+  else if(pendingDrag){if(pathMode)pathPick(pendingDrag);else if(!pendingDrag.ghost)openNote(pendingDrag.id);}
+  else if(!pathMode&&Math.hypot(e.clientX-downX,e.clientY-downY)<5){closePanel();hovered=null;}
   pendingDrag=null;dragging=null;panning=false;cv.classList.remove("drag");});
 cv.addEventListener("dblclick",e=>{const n=nodeAt(e.clientX,e.clientY);markUsed();
   if(!n){let any=false;for(const m of nodes)if(m.pinned){m.pinned=false;any=true;}if(any){savePins();alpha=Math.max(alpha,0.6);}return;}
@@ -452,7 +516,7 @@ cv.addEventListener("touchmove",e=>{
   if(miniDrag){minimapPanTo(t.clientX,t.clientY);return;}
   if(pendingDrag||dragging){if(pendingDrag&&Math.hypot(t.clientX-downX,t.clientY-downY)>8){dragging=pendingDrag;pendingDrag=null;}if(dragging){const w=toWorld(t.clientX,t.clientY);dragging.x=w.x;dragging.y=w.y;alpha=Math.max(alpha,0.5);}}
   else if(panning){view.x+=t.clientX-downX;view.y+=t.clientY-downY;downX=t.clientX;downY=t.clientY;}},{passive:true});
-cv.addEventListener("touchend",e=>{pinchD=0;if(miniDrag){miniDrag=false;return;}if(dragging){dragging.pinned=true;savePins();}else if(pendingDrag&&!pendingDrag.ghost)openNote(pendingDrag.id);pendingDrag=null;dragging=null;panning=false;},{passive:true});
+cv.addEventListener("touchend",e=>{pinchD=0;if(miniDrag){miniDrag=false;return;}if(dragging){dragging.pinned=true;savePins();}else if(pendingDrag){if(pathMode)pathPick(pendingDrag);else if(!pendingDrag.ghost)openNote(pendingDrag.id);}pendingDrag=null;dragging=null;panning=false;},{passive:true});
 
 function zoomTo(n){view.k=Math.min(2.4,Math.max(view.k,1.7));const pw=innerWidth>680&&panel.classList.contains("open")?Math.min(452,innerWidth*0.93):0;panTo={x:-pw/2-n.x*view.k,y:-n.y*view.k};}
 // Only recenter when the clicked node would be hidden behind the panel or is near
@@ -465,7 +529,8 @@ function zoomBy(f){markUsed();const w=toWorld(W/2,H/2);view.k=Math.max(0.35,Math
 document.getElementById("controls").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const a=b.dataset.act;
   if(a==="in")zoomBy(1.3);else if(a==="out")zoomBy(1/1.3);
   else if(a==="export")exportPNG();
-  else if(a==="fit"){userInteracted=false;closePanel();clearFilters();fit(null,true);}
+  else if(a==="path")togglePathMode();
+  else if(a==="fit"){userInteracted=false;closePanel();clearFilters();exitPathMode();fit(null,true);}
   else if(a==="theme"){const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",cur==="dark"?"light":"dark");}});
 // export the current graph view as a high-res PNG (branded) — share your brain map
 function exportPNG(){markUsed();hovered=null;
@@ -531,6 +596,7 @@ function syncTagFilter(){const el=document.getElementById("tagfilter");if(!el)re
   if(filterTag){el.innerHTML=`<span>filtering <b>#${esc(filterTag)}</b> · ${tagCounts[filterTag]||0} notes</span><span class="x">✕</span>`;el.style.display="flex";}
   else el.style.display="none";}
 document.getElementById("tagfilter").addEventListener("click",()=>{filterTag=null;syncTagFilter();markUsed();});
+document.getElementById("pathbar-x").addEventListener("click",exitPathMode);
 
 // overview: click the header stat to see the graph at a glance
 function wireRows(){panel.querySelectorAll("[data-go]").forEach(el=>{
@@ -589,7 +655,7 @@ q.addEventListener("keydown",e=>{if(!matches.length)return;
   else if(e.key==="Enter"&&selIdx>=0){openNote(matches[selIdx].slug);closeResults();q.blur();}});
 document.addEventListener("click",e=>{if(!e.target.closest(".search"))closeResults();});
 addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement!==q){e.preventDefault();q.focus();}
-  else if(e.key==="Escape"){closeResults();closePanel();q.blur();hovered=null;clearFilters();}
+  else if(e.key==="Escape"){if(pathMode)exitPathMode();closeResults();closePanel();q.blur();hovered=null;clearFilters();}
   else if(e.key==="ArrowLeft"&&panel.classList.contains("open")&&navStack.length&&document.activeElement!==q){e.preventDefault();goBack();}
   else if((e.key==="+"||e.key==="=")&&document.activeElement!==q)zoomBy(1.3);
   else if(e.key==="-"&&document.activeElement!==q)zoomBy(1/1.3);
