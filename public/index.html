@@ -136,6 +136,20 @@
   #pathbar #pathbar-txt .none{color:var(--n-moc);}
   #pathbar .x{flex:none;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;background:var(--card);border:none;color:var(--ink-dim);font-size:10px;cursor:pointer;}
   #pathbar .x:hover{color:var(--ink);}
+  #focusbar{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:10px;max-width:min(560px,92vw);padding:6px 7px 6px 14px;border-radius:100px;background:var(--panel);border:1px solid color-mix(in srgb,var(--accent) 42%,var(--line));backdrop-filter:blur(14px);box-shadow:var(--shadow);font-size:12.5px;color:var(--ink-dim);}
+  #focusbar.show{display:flex;}
+  #focusbar .pb-ico{color:var(--accent);font-size:15px;flex:none;}
+  #focusbar #focusbar-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #focusbar #focusbar-txt b{color:var(--ink);font-weight:650;}
+  #focusbar #focusbar-txt .fr{color:var(--accent);font-variant-numeric:tabular-nums;}
+  #focusbar .fr-btns{flex:none;display:flex;gap:3px;}
+  #focusbar .fr-btn{width:22px;height:22px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink-dim);font-family:var(--mono,ui-monospace);font-size:11px;cursor:pointer;transition:color .12s,border-color .12s;}
+  #focusbar .fr-btn:hover{color:var(--ink);}
+  #focusbar .fr-btn.on{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);}
+  #focusbar .x{flex:none;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;background:var(--card);border:none;color:var(--ink-dim);font-size:10px;cursor:pointer;}
+  #focusbar .x:hover{color:var(--ink);}
+  .focus-btn{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:5px 11px;border-radius:100px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));background:var(--bg-2);color:var(--accent);cursor:pointer;transition:background .12s;margin-top:2px;}
+  .focus-btn:hover{background:color-mix(in srgb,var(--accent) 12%,var(--bg-2));}
   #tagfilter:hover .x{color:var(--ink);}
   .chip.tag:hover{border-color:var(--accent-2);color:var(--accent-2);}
   .tagcloud{display:flex;flex-wrap:wrap;gap:7px;}
@@ -192,6 +206,7 @@
 <div id="legend"></div>
 <div id="hint" class="mono">hover to trace · click to read · drag to pin · scroll to zoom</div>
 <div id="pathbar"><span class="pb-ico" aria-hidden="true">⤳</span><span id="pathbar-txt"></span><button id="pathbar-x" class="x" title="Exit path finder" aria-label="Exit path finder">✕</button></div>
+<div id="focusbar"><span class="pb-ico" aria-hidden="true">◎</span><span id="focusbar-txt"></span><span class="fr-btns" role="group" aria-label="Focus radius"><button class="fr-btn" data-r="1" title="1 hop">1</button><button class="fr-btn on" data-r="2" title="2 hops">2</button><button class="fr-btn" data-r="3" title="3 hops">3</button></span><button id="focusbar-x" class="x" title="Exit focus" aria-label="Exit focus">✕</button></div>
 <div id="tagfilter"></div>
 <div id="tip"></div>
 <aside id="panel"><div class="close" id="px" role="button" tabindex="0" aria-label="Close">×</div><div id="pb"></div></aside>
@@ -292,7 +307,7 @@ function render(){
       n._x=cx+(p.x-cx)*ae;n._y=cy+(p.y-cy)*ae;n._a=ae;}
     else{n._x=p.x;n._y=p.y;n._a=1;}}
 
-  const focus=hovered||selected, active=focus?nbr.get(focus.id):null, pHi=pathHiSet();
+  const focus=hovered||selected, active=focus?nbr.get(focus.id):null, pHi=pathHiSet(), fHi=focusHiSet();
 
   // bloom
   if(isDark){ctx.globalCompositeOperation="lighter";
@@ -307,6 +322,7 @@ function render(){
   for(const e of edges){const vis=Math.min(e.s.hi,e.t.hi)*Math.min(e.s._a,e.t._a);
     let on,dim,col;
     if(pathState){on=!!pathState.edgeSet&&pathState.edgeSet.has(ek(e));dim=!on;col=PAL.accent2;}
+    else if(fHi){on=false;dim=!(fHi.has(e.s.id)&&fHi.has(e.t.id));col="#888";}   // edges within the focus set keep their normal look; the rest fade
     else{on=focus&&(e.s===focus||e.t===focus);dim=focus&&!on;col=focus?colorOf(focus):"#888";}
     if(on){ctx.strokeStyle=col;ctx.globalAlpha=0.92;ctx.lineWidth=pathState?2.6:1.8;if(isDark){ctx.shadowColor=col;ctx.shadowBlur=pathState?13:9;}}
     else{const lg=ctx.createLinearGradient(e.s._x,e.s._y,e.t._x,e.t._y);lg.addColorStop(0,colorOf(e.s));lg.addColorStop(1,colorOf(e.t));
@@ -349,9 +365,10 @@ function render(){
 
   // labels
   const cand=[];
-  for(const n of nodes){const onPath=pHi&&pHi.has(n.id);
-    if(n.ghost&&n!==focus&&!onPath)continue;const isHub=n.deg>=Math.max(5,maxDeg*0.42);
+  for(const n of nodes){const onPath=pHi&&pHi.has(n.id),onFocus=fHi&&fHi.has(n.id);
+    if(n.ghost&&n!==focus&&!onPath&&!onFocus)continue;const isHub=n.deg>=Math.max(5,maxDeg*0.42);
     if(pHi){if(onPath)cand.push([n,(pathState.from===n||pathState.to===n)?3:2]);continue;}
+    if(fHi){if(onFocus)cand.push([n,n===focusNode?3:2]);continue;}
     if(n===focus)cand.push([n,3]);else if(focus&&active.has(n.id))cand.push([n,2]);
     else if(!focus&&filterType&&n.type===filterType&&n.deg>=2)cand.push([n,2]);
     else if(!focus&&filterTag&&(n.tags||[]).includes(filterTag)&&n.deg>=1)cand.push([n,2]);
@@ -418,9 +435,10 @@ function frame(){
     const dk=panTo.k!==undefined?Math.abs(panTo.k-view.k):0;
     if(Math.abs(panTo.x-view.x)<0.5&&Math.abs(panTo.y-view.y)<0.5&&dk<0.003){view.x=panTo.x;view.y=panTo.y;if(panTo.k!==undefined)view.k=panTo.k;panTo=null;}}
   if(intro<1)intro=Math.min(1,intro+0.018);
-  const focus=hovered||selected,pHi=pathHiSet();
+  const focus=hovered||selected,pHi=pathHiSet(),fHi=focusHiSet();
   for(const n of nodes){let tgt=1;
     if(pHi)tgt=pHi.has(n.id)?1:0.09;
+    else if(fHi)tgt=fHi.has(n.id)?1:0.07;
     else if(focus)tgt=(n===focus||nbr.get(focus.id).has(n.id))?1:0.13;
     else if(filterType)tgt=(n.type===filterType)?1:0.11;
     else if(filterTag)tgt=(n.tags||[]).includes(filterTag)?1:0.11;
@@ -443,6 +461,22 @@ function pathHiSet(){if(!pathState)return null;
   if(pathState.nodeSet&&pathState.nodeSet.size)return pathState.nodeSet;
   const s=new Set();if(pathState.from)s.add(pathState.from.id);if(pathState.to)s.add(pathState.to.id);
   return s.size?s:null;}
+
+// ── focus mode: isolate a note's N-hop neighbourhood (BFS to depth) ──
+let focusNode=null,focusRadius=2,focusSet=null;
+function bfsWithin(center,radius){const set=new Set([center]);let fr=[center];
+  for(let d=0;d<radius;d++){const nx=[];for(const id of fr)for(const m of (nbr.get(id)||[]))if(!set.has(m)){set.add(m);nx.push(m);}fr=nx;if(!fr.length)break;}return set;}
+function focusHiSet(){return focusSet;}
+function enterFocus(node,radius){if(!node||node.ghost)return;if(pathMode)exitPathMode();
+  focusNode=node;focusRadius=radius||focusRadius;focusSet=bfsWithin(node.id,focusRadius);
+  selected=node;filterType=null;filterTag=null;syncLegend();syncTagFilter();markUsed();renderFocusbar();}
+function setFocusRadius(r){if(!focusNode)return;focusRadius=r;focusSet=bfsWithin(focusNode.id,r);renderFocusbar();}
+function exitFocus(){focusNode=null;focusSet=null;document.getElementById("focusbar").classList.remove("show");}
+function renderFocusbar(){const bar=document.getElementById("focusbar");if(!focusNode){bar.classList.remove("show");return;}
+  bar.classList.add("show");
+  document.getElementById("focusbar-txt").innerHTML=`<b>${esc(focusNode.title)}</b> · <span class="fr">${focusRadius} hop${focusRadius===1?"":"s"}</span> · ${focusSet.size} note${focusSet.size===1?"":"s"}`;
+  document.querySelectorAll("#focusbar .fr-btn").forEach(b=>b.classList.toggle("on",+b.dataset.r===focusRadius));}
+document.getElementById("focusbar").addEventListener("click",e=>{const b=e.target.closest(".fr-btn");if(b){setFocusRadius(+b.dataset.r);return;}if(e.target.closest("#focusbar-x"))exitFocus();});
 function togglePathMode(){pathMode?exitPathMode():enterPathMode();}
 function enterPathMode(){pathMode=true;pathA=null;pathState=null;selected=null;filterType=null;filterTag=null;
   closePanel();syncTagFilter();syncLegend();markUsed();
@@ -551,6 +585,7 @@ function renderBody(t){t=t||"";return t.split(/\n{2,}/).map(p=>"<p>"+esc(p)
 const panel=document.getElementById("panel");
 let navStack=[];
 async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
+  if(focusNode&&focusNode.id!==id)exitFocus();   // navigating to another note leaves focus mode
   if(selected&&selected.id!==id&&!(opts&&opts.back))navStack.push(selected.id);
   selected=n;filterType=null;filterTag=null;syncLegend();syncTagFilter();markUsed();centerOn(n);tip.style.display="none";
   const back=edges.filter(e=>e.t===n).map(e=>e.s),fwd=edges.filter(e=>e.s===n).map(e=>e.t);
@@ -572,12 +607,14 @@ async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
     `${backBtn}<div class="kicker mono" style="color:${colorOf(n)}">${label}</div>
      <h1>${esc(n.title)}</h1>
      <div class="chips" id="chips"><span class="chip type" style="background:${colorOf(n)}">${label}</span><span class="chip">${back.length} backlinks</span><span class="chip">${fwd.length} links out</span>${related.length?`<span class="chip">${related.length} related</span>`:""}</div>
+     ${(back.length+fwd.length)?`<button class="focus-btn" id="focusBtn" data-focus="${n.id}" title="Isolate this note's neighbourhood in the graph">◎ focus neighbourhood</button>`:""}
      <div class="body" id="noteBody">…</div>
      ${fwd.length?`<div class="meta"><div class="t">Links to</div>${rows(fwd)}</div>`:""}
      ${back.length?`<div class="meta"><div class="t">Linked from</div>${rows(back)}</div>`:""}
      ${related.length?`<div class="meta"><div class="t">Related · shared tags</div>${relRows}</div>`:""}`;
   panel.classList.add("open");panel.scrollTop=0;
   const bb=document.getElementById("backBtn");if(bb)bb.addEventListener("click",goBack);
+  const fb=document.getElementById("focusBtn");if(fb)fb.addEventListener("click",()=>enterFocus(n,focusRadius));
   wireRows();
   try{const note=await (await fetch("/api/note?slug="+encodeURIComponent(id))).json();
     if(selected!==n)return;
@@ -585,7 +622,7 @@ async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
     const ch=document.getElementById("chips");if(ch&&note.tags&&note.tags.length)note.tags.forEach(t=>{const s=document.createElement("span");s.className="chip tag";s.textContent="#"+t;s.style.cursor="pointer";s.title="Filter the graph by #"+t;s.addEventListener("click",()=>setTagFilter(t));ch.appendChild(s);});
   }catch(e){const b=document.getElementById("noteBody");if(b)b.textContent="(could not load note)";}}   // click to navigate + hover a row to cross-highlight the node in the graph
 function goBack(){const prev=navStack.pop();if(prev)openNote(prev,{back:true});}
-function closePanel(){panel.classList.remove("open");selected=null;navStack=[];}
+function closePanel(){panel.classList.remove("open");selected=null;navStack=[];exitFocus();}
 document.getElementById("px").addEventListener("click",closePanel);
 document.getElementById("px").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();closePanel();}});
 
@@ -655,7 +692,7 @@ q.addEventListener("keydown",e=>{if(!matches.length)return;
   else if(e.key==="Enter"&&selIdx>=0){openNote(matches[selIdx].slug);closeResults();q.blur();}});
 document.addEventListener("click",e=>{if(!e.target.closest(".search"))closeResults();});
 addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement!==q){e.preventDefault();q.focus();}
-  else if(e.key==="Escape"){if(pathMode)exitPathMode();closeResults();closePanel();q.blur();hovered=null;clearFilters();}
+  else if(e.key==="Escape"){if(pathMode)exitPathMode();exitFocus();closeResults();closePanel();q.blur();hovered=null;clearFilters();}
   else if(e.key==="ArrowLeft"&&panel.classList.contains("open")&&navStack.length&&document.activeElement!==q){e.preventDefault();goBack();}
   else if((e.key==="+"||e.key==="=")&&document.activeElement!==q)zoomBy(1.3);
   else if(e.key==="-"&&document.activeElement!==q)zoomBy(1/1.3);
