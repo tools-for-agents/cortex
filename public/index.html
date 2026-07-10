@@ -334,7 +334,49 @@ function render(){
     ctx.fillStyle=isDark?"rgba(6,8,15,.66)":"rgba(255,255,255,.74)";roundRect(rect.x,rect.y,rect.w,rect.h,6);ctx.fill();
     ctx.fillStyle=(n===focus)?PAL.ink:(pri>=2?PAL.ink:PAL.dim);ctx.fillText(n.title,n._x,n._y+r+7);}
   ctx.globalAlpha=1;
+  drawMinimap();
 }
+
+// ── minimap (top-left overview + live viewport rect; click / drag to pan) ──────
+// Reuses the same world coords the graph uses; the box maps the full graph bounds
+// into a small rect, and the stroked rectangle marks the world region on screen.
+let miniDrag=false, hideMini=false;
+const MINI_MAXW=178, MINI_H=116, MINI_PAD=9;
+function worldBounds(){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const n of nodes){if(n.x<a)a=n.x;if(n.y<b)b=n.y;if(n.x>c)c=n.x;if(n.y>d)d=n.y;}if(a>c){a=b=-1;c=d=1;}const m=20;return{a:a-m,b:b-m,c:c+m,d:d+m};}
+function miniGeom(){
+  if(W<=680||nodes.length<2)return null;                 // hide on narrow screens (matches the rest of the chrome)
+  const mw=Math.min(MINI_MAXW,W*0.2),mx=22,my=74,mh=MINI_H;   // top-left: clear of the header + the right-side note panel
+  const wb=worldBounds(),ww=(wb.c-wb.a)||1,wh=(wb.d-wb.b)||1;
+  const ms=Math.min((mw-MINI_PAD*2)/ww,(mh-MINI_PAD*2)/wh);
+  const cxw=(wb.a+wb.c)/2,cyw=(wb.b+wb.d)/2;
+  const M=(wx,wy)=>({x:mx+mw/2+(wx-cxw)*ms,y:my+mh/2+(wy-cyw)*ms});      // world → minimap
+  const Minv=(px,py)=>({x:(px-mx-mw/2)/ms+cxw,y:(py-my-mh/2)/ms+cyw});   // minimap → world
+  return{mx,my,mw,mh,ms,M,Minv};
+}
+function drawMinimap(){
+  if(hideMini)return; const G=miniGeom(); if(!G)return;
+  const {mx,my,mw,mh,M}=G;
+  ctx.save();
+  ctx.globalAlpha=1;
+  ctx.fillStyle=rgba(PAL.bg2,isDark?0.74:0.86);ctx.strokeStyle=rgba(PAL.line,0.95);ctx.lineWidth=1;
+  roundRect(mx,my,mw,mh,10);ctx.fill();ctx.stroke();
+  ctx.save();roundRect(mx,my,mw,mh,10);ctx.clip();
+  ctx.strokeStyle=rgba(PAL.ink,0.10);ctx.lineWidth=0.5;ctx.beginPath();
+  for(const e of edges){const s=M(e.s.x,e.s.y),t=M(e.t.x,e.t.y);ctx.moveTo(s.x,s.y);ctx.lineTo(t.x,t.y);}ctx.stroke();
+  for(const n of nodes){if(n.ghost)continue;const p=M(n.x,n.y);ctx.fillStyle=colorOf(n);ctx.globalAlpha=0.92;ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1.1,Math.min(3,R(n)*0.16)),0,7);ctx.fill();}
+  ctx.globalAlpha=1;
+  const tl=toWorld(0,0),br=toWorld(W,H),r1=M(tl.x,tl.y),r2=M(br.x,br.y);
+  const rx=Math.max(mx,Math.min(r1.x,r2.x)),ry=Math.max(my,Math.min(r1.y,r2.y));
+  const rX=Math.min(mx+mw,Math.max(r1.x,r2.x)),rY=Math.min(my+mh,Math.max(r1.y,r2.y));
+  ctx.fillStyle=rgba(PAL.ink,0.07);ctx.fillRect(rx,ry,Math.max(0,rX-rx),Math.max(0,rY-ry));
+  ctx.strokeStyle=rgba(PAL.ink,0.85);ctx.lineWidth=1.4;ctx.strokeRect(rx+0.7,ry+0.7,Math.max(0,rX-rx-1.4),Math.max(0,rY-ry-1.4));
+  ctx.restore();
+  ctx.globalAlpha=1;ctx.fillStyle=rgba(PAL.ink,0.5);ctx.font="9px ui-monospace,SFMono-Regular,Menlo,monospace";ctx.textAlign="left";ctx.textBaseline="alphabetic";
+  ctx.fillText("map",mx+9,my+mh-8);
+  ctx.restore();
+}
+function inMinimap(px,py){const G=miniGeom();if(!G)return false;return px>=G.mx&&px<=G.mx+G.mw&&py>=G.my&&py<=G.my+G.mh;}
+function minimapPanTo(px,py){const G=miniGeom();if(!G)return;const w=G.Minv(px,py);panTo={x:-w.x*view.k,y:-w.y*view.k};}   // recenter the graph on that world point
 
 function frame(){
   if(innerWidth!==W||innerHeight!==H){resize();if(!userInteracted)fit();}
@@ -365,6 +407,8 @@ function showTip(n,px,py){if(!n){tip.style.display="none";return;}const c=colorO
   tip.style.left=px+"px";tip.style.top=py+"px";tip.style.display="block";}
 function touchDist(e){const a=e.touches[0],b=e.touches[1];return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);}
 cv.addEventListener("mousemove",e=>{
+  if(miniDrag){minimapPanTo(e.clientX,e.clientY);return;}
+  if(!pendingDrag&&!dragging&&!panning&&inMinimap(e.clientX,e.clientY)){if(hovered){hovered=null;}tip.style.display="none";cv.style.cursor="pointer";return;}
   if(pendingDrag||dragging){
     if(pendingDrag&&Math.hypot(e.clientX-downX,e.clientY-downY)>5){dragging=pendingDrag;pendingDrag=null;}
     if(dragging){const w=toWorld(e.clientX,e.clientY);dragging.x=w.x;dragging.y=w.y;dragging.vx=dragging.vy=0;alpha=Math.max(alpha,0.5);}
@@ -373,8 +417,11 @@ cv.addEventListener("mousemove",e=>{
   const h=nodeAt(e.clientX,e.clientY);if(h!==hovered){hovered=h;cv.style.cursor=h?"pointer":"grab";}
   showTip(hovered,e.clientX,e.clientY);});
 cv.addEventListener("mouseleave",()=>{hovered=null;tip.style.display="none";});
-cv.addEventListener("mousedown",e=>{markUsed();downX=e.clientX;downY=e.clientY;const n=nodeAt(e.clientX,e.clientY);if(n)pendingDrag=n;else{panning=true;cv.classList.add("drag");}});
+cv.addEventListener("mousedown",e=>{markUsed();downX=e.clientX;downY=e.clientY;
+  if(inMinimap(e.clientX,e.clientY)){miniDrag=true;minimapPanTo(e.clientX,e.clientY);cv.classList.add("drag");return;}
+  const n=nodeAt(e.clientX,e.clientY);if(n)pendingDrag=n;else{panning=true;cv.classList.add("drag");}});
 addEventListener("mouseup",e=>{
+  if(miniDrag){miniDrag=false;cv.classList.remove("drag");return;}
   if(dragging){dragging.pinned=true;savePins();}
   else if(pendingDrag){if(!pendingDrag.ghost)openNote(pendingDrag.id);}
   else if(Math.hypot(e.clientX-downX,e.clientY-downY)<5){closePanel();hovered=null;}
@@ -385,13 +432,16 @@ cv.addEventListener("dblclick",e=>{const n=nodeAt(e.clientX,e.clientY);markUsed(
 cv.addEventListener("wheel",e=>{e.preventDefault();markUsed();
   const f=Math.min(1.16,Math.max(0.86,Math.exp(-e.deltaY*0.0012)));const w=toWorld(e.clientX,e.clientY);
   view.k=Math.max(0.35,Math.min(4.5,view.k*f));const p=S({x:w.x,y:w.y});view.x+=e.clientX-p.x;view.y+=e.clientY-p.y;},{passive:false});
-cv.addEventListener("touchstart",e=>{markUsed();if(e.touches.length===2){pinchD=touchDist(e);return;}const t=e.touches[0];downX=t.clientX;downY=t.clientY;const n=nodeAt(t.clientX,t.clientY);if(n)pendingDrag=n;else panning=true;},{passive:true});
+cv.addEventListener("touchstart",e=>{markUsed();if(e.touches.length===2){pinchD=touchDist(e);return;}const t=e.touches[0];downX=t.clientX;downY=t.clientY;
+  if(inMinimap(t.clientX,t.clientY)){miniDrag=true;minimapPanTo(t.clientX,t.clientY);return;}
+  const n=nodeAt(t.clientX,t.clientY);if(n)pendingDrag=n;else panning=true;},{passive:true});
 cv.addEventListener("touchmove",e=>{
   if(e.touches.length===2){const d=touchDist(e);if(pinchD){const f=d/pinchD;const cx=(e.touches[0].clientX+e.touches[1].clientX)/2,cy=(e.touches[0].clientY+e.touches[1].clientY)/2,w=toWorld(cx,cy);view.k=Math.max(0.35,Math.min(4.5,view.k*f));const p=S({x:w.x,y:w.y});view.x+=cx-p.x;view.y+=cy-p.y;}pinchD=d;return;}
   const t=e.touches[0];
+  if(miniDrag){minimapPanTo(t.clientX,t.clientY);return;}
   if(pendingDrag||dragging){if(pendingDrag&&Math.hypot(t.clientX-downX,t.clientY-downY)>8){dragging=pendingDrag;pendingDrag=null;}if(dragging){const w=toWorld(t.clientX,t.clientY);dragging.x=w.x;dragging.y=w.y;alpha=Math.max(alpha,0.5);}}
   else if(panning){view.x+=t.clientX-downX;view.y+=t.clientY-downY;downX=t.clientX;downY=t.clientY;}},{passive:true});
-cv.addEventListener("touchend",e=>{pinchD=0;if(dragging){dragging.pinned=true;savePins();}else if(pendingDrag&&!pendingDrag.ghost)openNote(pendingDrag.id);pendingDrag=null;dragging=null;panning=false;},{passive:true});
+cv.addEventListener("touchend",e=>{pinchD=0;if(miniDrag){miniDrag=false;return;}if(dragging){dragging.pinned=true;savePins();}else if(pendingDrag&&!pendingDrag.ghost)openNote(pendingDrag.id);pendingDrag=null;dragging=null;panning=false;},{passive:true});
 
 function zoomTo(n){view.k=Math.min(2.4,Math.max(view.k,1.7));const pw=innerWidth>680&&panel.classList.contains("open")?Math.min(452,innerWidth*0.93):0;panTo={x:-pw/2-n.x*view.k,y:-n.y*view.k};}
 // Only recenter when the clicked node would be hidden behind the panel or is near
@@ -408,8 +458,9 @@ document.getElementById("controls").addEventListener("click",e=>{const b=e.targe
   else if(a==="theme"){const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",cur==="dark"?"light":"dark");}});
 // export the current graph view as a high-res PNG (branded) — share your brain map
 function exportPNG(){markUsed();hovered=null;
+  hideMini=true;render();               // draw one clean frame so the minimap stays out of the shared image
   const off=document.createElement("canvas");off.width=cv.width;off.height=cv.height;
-  const octx=off.getContext("2d");octx.drawImage(cv,0,0);
+  const octx=off.getContext("2d");octx.drawImage(cv,0,0);hideMini=false;
   octx.setTransform(DPR,0,0,DPR,0,0);
   octx.font="600 13px ui-monospace,SFMono-Regular,Menlo,monospace";octx.textAlign="right";octx.textBaseline="bottom";
   octx.fillStyle=isDark?"rgba(230,237,251,.45)":"rgba(30,40,70,.45)";
