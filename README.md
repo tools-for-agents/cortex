@@ -87,6 +87,7 @@ Vault location: `$CORTEX_VAULT` (default `./vault`).
 - **Search** from the top bar (ranked dropdown, keyboard-navigable), **filter** by type from the legend, click the stat for a **graph overview** — hubs, type breakdown, and the gaps worth closing: **orphans** (notes with no links, ready to connect) and **unwritten** notes (broken-link targets to write). Click an orphan to open it, or an unwritten one to fly to what references it.
 - Drag to rearrange, scroll/pinch to zoom, recenter, and a light/dark theme toggle.
 - **Minimap** — a small overview of the whole brain sits in the top-left, with a rectangle marking the part you're looking at; click or drag on it to fly across a large graph without losing your place.
+- **Keyboard-accessible** — every control has a visible focus ring, and the legend type-filters, note-panel links and related notes are all reachable with Tab + Enter (not just the mouse), with aria-labels throughout.
 - **Live** — the server watches the vault and pushes updates over SSE, so the graph grows in real time as your agent (or you, in Obsidian) writes notes. It's the same brain your agent writes to — watch it grow.
 
 Want a graph to look at right away? Seed a starter vault (interlinked notes about the toolkit itself):

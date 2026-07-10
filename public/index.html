@@ -30,6 +30,7 @@
   canvas.drag{cursor:grabbing;}
   button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
   button:focus-visible,input:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  #legend .row:focus-visible,.backlink:focus-visible{outline-offset:-2px;}   /* inset for tight list rows */
   ::selection{background:color-mix(in srgb,var(--accent) 30%,transparent);}
 
   /* ── top bar ── */
@@ -177,7 +178,7 @@
 <div id="hint" class="mono">hover to trace · click to read · drag to pin · scroll to zoom</div>
 <div id="tagfilter"></div>
 <div id="tip"></div>
-<aside id="panel"><div class="close" id="px" role="button" aria-label="Close">×</div><div id="pb"></div></aside>
+<aside id="panel"><div class="close" id="px" role="button" tabindex="0" aria-label="Close">×</div><div id="pb"></div></aside>
 
 <script>
 "use strict";
@@ -512,6 +513,7 @@ async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
 function goBack(){const prev=navStack.pop();if(prev)openNote(prev,{back:true});}
 function closePanel(){panel.classList.remove("open");selected=null;navStack=[];}
 document.getElementById("px").addEventListener("click",closePanel);
+document.getElementById("px").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();closePanel();}});
 
 // ── tag filter: highlight every note carrying a tag ───────────────────────────
 function setTagFilter(t){filterTag=filterTag===t?null:t;filterType=null;markUsed();syncLegend();syncTagFilter();}
@@ -523,7 +525,9 @@ document.getElementById("tagfilter").addEventListener("click",()=>{filterTag=nul
 
 // overview: click the header stat to see the graph at a glance
 function wireRows(){panel.querySelectorAll("[data-go]").forEach(el=>{
+  el.setAttribute("tabindex","0");el.setAttribute("role","button");                    // keyboard-navigable
   el.addEventListener("click",()=>openNote(el.dataset.go));
+  el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openNote(el.dataset.go);}});
   el.addEventListener("mouseenter",()=>{const t=bySlug.get(el.dataset.go);if(t&&!t.ghost)hovered=t;});
   el.addEventListener("mouseleave",()=>{hovered=null;});});}
 function showOverview(){selected=null;navStack=[];clearFilters();markUsed();tip.style.display="none";
@@ -545,8 +549,8 @@ function showOverview(){selected=null;navStack=[];clearFilters();markUsed();tip.
      <div class="meta"><div class="t">By type</div>${types.map(x=>{const c=css("--n-"+(TYPE_COLOR[x.t]||"concept"));return `<div class="backlink" style="cursor:default"><span class="d" style="color:${c};background:${c}"></span>${(TYPE[x.t]||{label:x.t}).label}<span class="u">${x.c}</span></div>`;}).join("")}</div>
      ${topTags.length?`<div class="meta"><div class="t">Top tags · click to filter</div><div class="tagcloud">${topTags.map(x=>`<span class="tagpill" data-tag="${esc(x.t)}">#${esc(x.t)}<b>${x.c}</b></span>`).join("")}</div></div>`:""}`;
   panel.classList.add("open");panel.scrollTop=0;wireRows();
-  panel.querySelectorAll(".tagpill[data-tag]").forEach(el=>el.addEventListener("click",()=>setTagFilter(el.dataset.tag)));
-  panel.querySelectorAll("[data-pan]").forEach(el=>{el.addEventListener("click",()=>panToNode(el.dataset.pan));el.addEventListener("mouseenter",()=>{const t=bySlug.get(el.dataset.pan);if(t)hovered=t;});el.addEventListener("mouseleave",()=>{hovered=null;});});}
+  panel.querySelectorAll(".tagpill[data-tag]").forEach(el=>{el.setAttribute("tabindex","0");el.setAttribute("role","button");el.setAttribute("aria-label","Filter by #"+el.dataset.tag);const go=()=>setTagFilter(el.dataset.tag);el.addEventListener("click",go);el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});});
+  panel.querySelectorAll("[data-pan]").forEach(el=>{el.setAttribute("tabindex","0");el.setAttribute("role","button");const go=()=>panToNode(el.dataset.pan);el.addEventListener("click",go);el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});el.addEventListener("mouseenter",()=>{const t=bySlug.get(el.dataset.pan);if(t)hovered=t;});el.addEventListener("mouseleave",()=>{hovered=null;});});}
 // centre the graph on a node (used for unwritten/ghost notes — they have no page to open,
 // so we fly to them and light up the notes that reference them).
 function panToNode(id){const n=bySlug.get(id);if(!n)return;markUsed();hovered=n;const pw=innerWidth>680&&panel.classList.contains("open")?Math.min(452,innerWidth*0.93):0;panTo={x:-pw/2-n.x*view.k,y:-n.y*view.k};}
@@ -585,10 +589,10 @@ addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement!==q){e.pre
 // ── legend (click a type to isolate it) ───────────────────────────────────────
 const legend=document.getElementById("legend");
 function buildLegend(){const order=Object.keys(typeCounts).sort((a,b)=>typeCounts[b]-typeCounts[a]);
-  legend.innerHTML=`<div class="t">node types · click to filter</div>`+order.map(t=>{const c=css("--n-"+(TYPE_COLOR[t]||"concept"));return `<div class="row" data-t="${t}"><span class="g" style="color:${c};background:${c}"></span>${(TYPE[t]?TYPE[t].label:t)}<span class="n">${typeCounts[t]||0}</span></div>`;}).join("")+(ghostCount?`<div class="row" data-t="ghost" style="cursor:default"><span class="g ghost"></span>unwritten<span class="n">${ghostCount}</span></div>`:"");
-  legend.querySelectorAll(".row[data-t]").forEach(el=>{const t=el.dataset.t;if(t==="ghost")return;el.addEventListener("click",()=>{filterType=filterType===t?null:t;selected&&closePanel();markUsed();syncLegend();});});
+  legend.innerHTML=`<div class="t">node types · click to filter</div>`+order.map(t=>{const c=css("--n-"+(TYPE_COLOR[t]||"concept"));return `<div class="row" data-t="${t}" tabindex="0" role="button" aria-label="Filter by ${TYPE[t]?TYPE[t].label:t}"><span class="g" style="color:${c};background:${c}"></span>${(TYPE[t]?TYPE[t].label:t)}<span class="n">${typeCounts[t]||0}</span></div>`;}).join("")+(ghostCount?`<div class="row" data-t="ghost" style="cursor:default"><span class="g ghost"></span>unwritten<span class="n">${ghostCount}</span></div>`:"");
+  legend.querySelectorAll(".row[data-t]").forEach(el=>{const t=el.dataset.t;if(t==="ghost")return;const toggle=()=>{filterType=filterType===t?null:t;selected&&closePanel();markUsed();syncLegend();};el.addEventListener("click",toggle);el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();toggle();}});});
   syncLegend();}
-function syncLegend(){legend.querySelectorAll(".row[data-t]").forEach(el=>{const t=el.dataset.t;el.classList.toggle("solo",filterType===t);el.classList.toggle("off",filterType&&filterType!==t&&t!=="ghost");});}
+function syncLegend(){legend.querySelectorAll(".row[data-t]").forEach(el=>{const t=el.dataset.t;el.classList.toggle("solo",filterType===t);el.classList.toggle("off",filterType&&filterType!==t&&t!=="ghost");if(t!=="ghost")el.setAttribute("aria-pressed",filterType===t);});}
 
 // ── theme reactivity ──────────────────────────────────────────────────────────
 function applyTheme(){readPalette();buildLegend();
