@@ -531,15 +531,25 @@ function showOverview(){selected=null;navStack=[];clearFilters();markUsed();tip.
   const types=Object.keys(typeCounts).map(t=>({t,c:typeCounts[t]})).sort((a,b)=>b.c-a.c);
   const topTags=Object.keys(tagCounts).map(t=>({t,c:tagCounts[t]})).sort((a,b)=>b.c-a.c).slice(0,10);
   const unwritten=nodes.filter(n=>n.ghost).length;
+  // gaps worth closing: real notes with no links (orphans) + wikilink targets not yet written (ghosts)
+  const orphans=nodes.filter(n=>!n.ghost&&n.deg===0).sort((a,b)=>a.title.localeCompare(b.title));
+  const ghosts=nodes.filter(n=>n.ghost).sort((a,b)=>b.deg-a.deg);
+  const orphanSec=orphans.length?`<div class="meta"><div class="t">Orphans · connect these</div>${orphans.slice(0,8).map(o=>`<div class="backlink" data-go="${o.id}"><span class="d" style="color:${colorOf(o)};background:${colorOf(o)}"></span>${esc(o.title)}<span class="u">${esc((TYPE[o.type]||{label:o.type}).label)}</span></div>`).join("")}</div>`:"";
+  const ghostSec=ghosts.length?`<div class="meta"><div class="t">Unwritten · write these</div>${ghosts.slice(0,8).map(g=>`<div class="backlink" data-pan="${g.id}"><span class="d" style="color:var(--ink-faint);background:var(--ink-faint)"></span>${esc(g.title)}<span class="u">${g.deg} ref${g.deg===1?"":"s"}</span></div>`).join("")}</div>`:"";
   document.getElementById("pb").innerHTML=
     `<div class="kicker mono" style="color:var(--accent)">overview</div>
      <h1>The graph at a glance</h1>
      <div class="chips"><span class="chip">${realCount} notes</span><span class="chip">${edges.length} links</span><span class="chip">${unwritten} unwritten</span></div>
      <div class="meta"><div class="t">Most connected</div>${hubs.map(h=>`<div class="backlink" data-go="${h.id}"><span class="d" style="color:${colorOf(h)};background:${colorOf(h)}"></span>${esc(h.title)}<span class="u">${h.deg} links</span></div>`).join("")}</div>
+     ${orphanSec}${ghostSec}
      <div class="meta"><div class="t">By type</div>${types.map(x=>{const c=css("--n-"+(TYPE_COLOR[x.t]||"concept"));return `<div class="backlink" style="cursor:default"><span class="d" style="color:${c};background:${c}"></span>${(TYPE[x.t]||{label:x.t}).label}<span class="u">${x.c}</span></div>`;}).join("")}</div>
      ${topTags.length?`<div class="meta"><div class="t">Top tags · click to filter</div><div class="tagcloud">${topTags.map(x=>`<span class="tagpill" data-tag="${esc(x.t)}">#${esc(x.t)}<b>${x.c}</b></span>`).join("")}</div></div>`:""}`;
   panel.classList.add("open");panel.scrollTop=0;wireRows();
-  panel.querySelectorAll(".tagpill[data-tag]").forEach(el=>el.addEventListener("click",()=>setTagFilter(el.dataset.tag)));}
+  panel.querySelectorAll(".tagpill[data-tag]").forEach(el=>el.addEventListener("click",()=>setTagFilter(el.dataset.tag)));
+  panel.querySelectorAll("[data-pan]").forEach(el=>{el.addEventListener("click",()=>panToNode(el.dataset.pan));el.addEventListener("mouseenter",()=>{const t=bySlug.get(el.dataset.pan);if(t)hovered=t;});el.addEventListener("mouseleave",()=>{hovered=null;});});}
+// centre the graph on a node (used for unwritten/ghost notes — they have no page to open,
+// so we fly to them and light up the notes that reference them).
+function panToNode(id){const n=bySlug.get(id);if(!n)return;markUsed();hovered=n;const pw=innerWidth>680&&panel.classList.contains("open")?Math.min(452,innerWidth*0.93):0;panTo={x:-pw/2-n.x*view.k,y:-n.y*view.k};}
 const statEl=document.querySelector(".stat");statEl.style.cursor="pointer";statEl.title="Graph overview";statEl.addEventListener("click",showOverview);
 
 // ── search with dropdown ──────────────────────────────────────────────────────

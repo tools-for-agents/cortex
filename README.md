@@ -84,7 +84,7 @@ Vault location: `$CORTEX_VAULT` (default `./vault`).
 - **Hover** any note to trace its neighbourhood — connected notes light up with energy flowing along the links, everything else dims.
 - **Click** a note to read it in a side panel (fetched live): its body with clickable `[[wikilinks]]`, its tags, and its *links to* / *linked from* lists — navigate note-to-note with a back button.
 - **Related notes** — the panel also surfaces notes that share a tag but *aren't linked yet* (ranked by shared-tag count), each showing the tag they have in common — the latent connections worth writing, so your second brain keeps knitting itself together.
-- **Search** from the top bar (ranked dropdown, keyboard-navigable), **filter** by type from the legend, click the stat for a **graph overview** (hubs, type breakdown).
+- **Search** from the top bar (ranked dropdown, keyboard-navigable), **filter** by type from the legend, click the stat for a **graph overview** — hubs, type breakdown, and the gaps worth closing: **orphans** (notes with no links, ready to connect) and **unwritten** notes (broken-link targets to write). Click an orphan to open it, or an unwritten one to fly to what references it.
 - Drag to rearrange, scroll/pinch to zoom, recenter, and a light/dark theme toggle.
 - **Minimap** — a small overview of the whole brain sits in the top-left, with a rectangle marking the part you're looking at; click or drag on it to fly across a large graph without losing your place.
 - **Live** — the server watches the vault and pushes updates over SSE, so the graph grows in real time as your agent (or you, in Obsidian) writes notes. It's the same brain your agent writes to — watch it grow.

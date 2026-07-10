@@ -29,6 +29,9 @@ const notes = [
     'An external, durable store of interconnected notes so you never re-derive what you already worked out. Realised here by [[cortex]] via the [[LLM Wiki]] pattern.'],
   ['LLM Wiki', 'source', ['second-brain'],
     'Andrej Karpathy\'s pattern: an agent compiles raw material into an interconnected wiki of atomic notes, and keeps it current — instead of asking the model the same questions again. The inspiration for [[cortex]].'],
+  // A deliberately unlinked capture — shows up as an "orphan" in the overview until you weave it in.
+  ['Inbox: prompt-caching idea', 'note', ['inbox'],
+    'Quick capture from a run: cache the system prompt and tool schemas across turns to cut token cost on long sessions. Jotted but not yet connected to anything — a candidate to link into the graph.'],
 ];
 
 let n = 0;
