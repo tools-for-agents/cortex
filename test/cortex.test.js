@@ -80,3 +80,16 @@ test('sync rebuilds the index from files on disk', () => {
   assert.equal(s.total, before);
   assert.equal(cx.stats().notes, before);
 });
+
+test('graphData carries each note\'s updated time (the graph\'s time dimension)', () => {
+  cx.write('Timed', { type: 'concept', body: 'A note with a timestamp. Links to [[Nowhere]].' });
+  const g = cx.graphData();
+  const timed = g.nodes.find((n) => n.id === 'timed');
+  assert.ok(timed.updated, 'a real note carries updated');
+  assert.ok(Number.isFinite(+new Date(timed.updated)), 'updated parses as a date');
+  // every written note has one; only the unwritten ghosts do not
+  for (const n of g.nodes) {
+    if (n.ghost) assert.equal(n.updated, undefined, 'a ghost has no update time — it does not exist yet');
+    else assert.ok(n.updated, `${n.id} carries updated`);
+  }
+});
