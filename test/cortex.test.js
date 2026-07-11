@@ -244,3 +244,47 @@ test('journal: the day accumulates, and can be read back', async () => {
       'reading the journal does not write to it');
   } finally { server.close(); }
 });
+
+test('lint: the vault can tell you it is decaying — and writing the note heals it', async () => {
+  const server = createCortexServer();
+  await new Promise((r) => server.listen(0, r));
+  const base = `http://localhost:${server.address().port}`;
+  try {
+    // a note that points at something nobody wrote: the graph draws it as a ghost,
+    // and until now nothing ever counted it
+    cx.write('Consensus Protocols', { type: 'concept', tags: ['dist'], body: 'They agree. See [[Paxos]].' });
+
+    const l1 = await fetch(base + '/api/lint').then((r) => r.json());
+    const broken = l1.broken.find((b) => /paxos/i.test(b.target));
+    assert.ok(broken, 'the dangling wikilink is reported');
+    assert.equal(broken.from, 'Consensus Protocols', 'and says which note points at nothing');
+
+    // an orphan: linked by nobody, linking to nobody
+    cx.write('Lonely Thought', { type: 'note', tags: ['x'], body: 'Nothing points here and it points nowhere.' });
+    const l2 = await fetch(base + '/api/lint').then((r) => r.json());
+    assert.ok(l2.orphans.some((o) => o.slug === 'lonely-thought'));
+
+    // a stub — a title with nothing behind it
+    cx.write('Stub', { type: 'note', body: 'tiny' });
+    const l3 = await fetch(base + '/api/lint').then((r) => r.json());
+    assert.ok(l3.stubs.some((s) => s.slug === 'stub' && s.chars < 120));
+
+    // THE POINT: writing the note that was pointed at heals the broken link — the
+    // report is not just a list of complaints, it is a list of things you can fix
+    const before = (await fetch(base + '/api/lint').then((r) => r.json())).broken_count;
+    await fetch(base + '/api/note', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Paxos', type: 'concept', body: 'A consensus algorithm.' }),
+    });
+    const after = await fetch(base + '/api/lint').then((r) => r.json());
+    assert.equal(after.broken_count, before - 1, 'the dangling link is gone');
+    assert.ok(!after.broken.some((b) => /paxos/i.test(b.target)));
+
+    // …and it is no longer an orphan either: the link that was broken now holds it
+    assert.ok(!after.orphans.some((o) => o.slug === 'paxos'), 'the note it healed into is connected');
+
+    // stale is opt-in and separate: not a fault, just what you have stopped thinking about
+    const stale = await fetch(base + '/api/lint?stale_days=90').then((r) => r.json());
+    assert.ok('stale_count' in stale);
+  } finally { server.close(); }
+});

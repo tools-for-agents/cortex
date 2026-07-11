@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { graphData, read, search, stats, tags, sync, capture, triage, weave, write, daily, journal, VAULT } from './core.js';
+import { graphData, read, search, stats, tags, sync, capture, triage, weave, write, daily, journal, lint, VAULT } from './core.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(__dir, '..', 'public', 'index.html');
@@ -95,6 +95,12 @@ export function createCortexServer() {
           return json(res, 200, r);
         }
         return json(res, 200, journal({ limit: q.limit }));
+      }
+      // The vault's condition, whole: what is orphaned, what points at nothing, what
+      // is untagged, what is a stub, and what has gone quiet. The graph draws ghosts;
+      // nothing ever counted them.
+      if (url.pathname === '/api/lint') {
+        return json(res, 200, lint({ stale_days: +q.stale_days > 0 ? +q.stale_days : 90 }));
       }
       if (url.pathname === '/api/triage') return json(res, 200, triage({ limit: q.limit }));
       if (url.pathname === '/api/graph') return json(res, 200, graphData());
