@@ -105,6 +105,37 @@
     border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(103%);
     transition:transform .4s cubic-bezier(.19,.66,.28,1);overflow-y:auto;padding:32px 32px 60px;}
   #panel.open{transform:none;}
+  /* ── Composer: write a note straight into the vault ── */
+  #composer{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;
+    background:rgba(4,6,14,.62);backdrop-filter:blur(4px);}
+  #composer[hidden]{display:none;}
+  :root[data-theme="light"] #composer{background:rgba(230,234,246,.66);}
+  .cmp{position:relative;width:min(600px,100%);background:var(--panel-solid);border:1px solid var(--line);
+    border-radius:16px;box-shadow:var(--shadow);padding:26px 26px 20px;}
+  .cmp-x{position:absolute;top:16px;right:18px;width:30px;height:30px;border-radius:9px;background:none;
+    border:1px solid transparent;color:var(--ink-dim);font-size:19px;line-height:1;cursor:pointer;}
+  .cmp-x:hover{color:var(--ink);border-color:var(--line);background:var(--card);}
+  .cmp h2{margin:0 0 3px;font-size:19px;}
+  .cmp-lede{color:var(--ink-dim);font-size:12px;margin-bottom:18px;}
+  .cmp-lede code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--accent-2);}
+  .cmp-row{display:flex;gap:9px;margin-bottom:9px;}
+  .cmp input,.cmp select,.cmp textarea{width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);font-size:13.5px;padding:10px 12px;outline:none;font-family:inherit;}
+  .cmp input:focus,.cmp select:focus,.cmp textarea:focus{border-color:var(--accent-2);}
+  .cmp-row #cmpName{flex:1;}
+  .cmp-row #cmpType{flex:0 0 148px;cursor:pointer;}
+  #cmpTags{margin-bottom:9px;font-size:12.5px;}
+  #cmpBody{min-height:190px;resize:vertical;line-height:1.6;font-size:13px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
+  .cmp-err{margin-top:8px;font-size:12px;color:#f0776a;}
+  .cmp-err[hidden]{display:none;}
+  .cmp-foot{display:flex;align-items:center;margin-top:14px;}
+  .cmp-hint{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--ink-faint);}
+  .cmp-save{margin-left:auto;font-size:13px;font-weight:650;color:var(--accent-2);cursor:pointer;
+    background:color-mix(in srgb,var(--accent-2) 14%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent-2) 42%,transparent);border-radius:10px;padding:8px 18px;}
+  .cmp-save:hover{background:color-mix(in srgb,var(--accent-2) 24%,transparent);}
+  .cmp-save:disabled{opacity:.55;cursor:default;}
   /* ── Inbox: the captures nobody wove in ── */
   #inbox{position:fixed;top:0;right:0;bottom:0;z-index:31;width:min(452px,93vw);background:var(--panel-solid);
     border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(103%);
@@ -244,6 +275,7 @@
   <button data-act="theme" title="Toggle theme" aria-label="Toggle theme"><svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4l1.4-1.4M18 6l1.4-1.4"/></svg></button>
   <button data-act="path" id="pathBtn" title="Find the path between two notes" aria-label="Find the path between two notes" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="18.5" r="2.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="5.5" r="2.4" fill="currentColor" stroke="none"/><path d="M8 16.2C10 14 10.5 8 16 7"/></svg></button>
   <button data-act="heat" id="heatBtn" title="Shade notes by how recently they were updated" aria-label="Shade notes by how recently they were updated" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.2l3.4 2"/></svg></button>
+  <button data-act="new" id="newBtn" title="Write a note (n)" aria-label="Write a note"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
   <button data-act="inbox" id="inboxBtn" title="Inbox — captures that were never woven in" aria-label="Inbox — captures that were never woven in"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h4l2 3h6l2-3h4"/><path d="M5.5 5h13l2.5 8v5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18v-5z"/></svg><span class="badge" id="inboxCount" hidden></span></button>
   <div class="sep"></div>
   <button data-act="export" title="Download graph as PNG" aria-label="Download graph as PNG"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11M8 11l4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></button>
@@ -261,6 +293,24 @@
 <div id="tagfilter"></div>
 <div id="tip"></div>
 <aside id="panel"><div class="close" id="px" role="button" tabindex="0" aria-label="Close">×</div><div id="pb"></div></aside>
+<div id="composer" hidden>
+  <div class="cmp">
+    <button class="cmp-x" id="cmpX" aria-label="Close">×</button>
+    <h2 id="cmpTitle">Write a note</h2>
+    <div class="cmp-lede" id="cmpLede">It lands in the vault as markdown — <code>[[wikilinks]]</code> heal into the graph on save.</div>
+    <div class="cmp-row">
+      <input id="cmpName" placeholder="title…" autocomplete="off" spellcheck="false" aria-label="Note title" />
+      <select id="cmpType" aria-label="Note type"></select>
+    </div>
+    <input id="cmpTags" placeholder="tags, comma separated…" autocomplete="off" spellcheck="false" aria-label="Tags" />
+    <textarea id="cmpBody" placeholder="Write it. Link out with [[Another Note]]." spellcheck="false" aria-label="Note body"></textarea>
+    <div class="cmp-err" id="cmpErr" hidden></div>
+    <div class="cmp-foot">
+      <span class="cmp-hint">⌘⏎ to save</span>
+      <button class="cmp-save" id="cmpSave">write it</button>
+    </div>
+  </div>
+</div>
 <aside id="inbox" aria-label="Inbox"><div class="close" id="ix" role="button" tabindex="0" aria-label="Close">×</div><div id="ib"></div></aside>
 
 <script>
@@ -569,6 +619,59 @@ function syncHeatScale(){
   el.classList.add("show");lg.style.display="none";
 }
 
+// ── Composer: write a note straight into the vault ──────────────────────────
+// The graph could show you an UNWRITTEN note — a dashed ghost where a [[wikilink]]
+// points at nothing — and then refuse to help: ghosts weren't even clickable. Now
+// clicking one opens the composer with its title already in place. Write it, and
+// the broken link heals itself into a real edge.
+function openComposer(title = "", opts = {}) {
+  const el = document.getElementById("composer");
+  const sel = document.getElementById("cmpType");
+  if (!sel.options.length) {
+    sel.innerHTML = Object.entries(TYPE).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("");
+  }
+  sel.value = opts.type || "note";
+  document.getElementById("cmpName").value = title;
+  document.getElementById("cmpTags").value = "";
+  document.getElementById("cmpBody").value = opts.body || "";
+  document.getElementById("cmpErr").hidden = true;
+  document.getElementById("cmpTitle").textContent = opts.ghost ? "Write the unwritten note" : "Write a note";
+  document.getElementById("cmpLede").innerHTML = opts.ghost
+    ? `Something already links to <b>${esc(title)}</b> — writing it heals that link into the graph.`
+    : `It lands in the vault as markdown — <code>[[wikilinks]]</code> heal into the graph on save.`;
+  el.hidden = false;
+  setTimeout(() => document.getElementById(title ? "cmpBody" : "cmpName").focus(), 40);
+}
+function closeComposer() { document.getElementById("composer").hidden = true; }
+
+async function saveNote() {
+  const btn = document.getElementById("cmpSave"), err = document.getElementById("cmpErr");
+  const title = document.getElementById("cmpName").value.trim();
+  if (!title) { err.textContent = "a title is required — it is how other notes will link to it"; err.hidden = false; return; }
+  const tags = document.getElementById("cmpTags").value.split(",").map(t => t.trim().replace(/^#/, "")).filter(Boolean);
+  btn.disabled = true; btn.textContent = "writing…"; err.hidden = true;
+  try {
+    const res = await fetch("/api/note", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, type: document.getElementById("cmpType").value, tags,
+        body: document.getElementById("cmpBody").value }) });
+    const r = await res.json();
+    if (!res.ok || r.error) throw new Error(r.error || "could not write that note");
+    closeComposer();
+    await refreshGraph();            // the SSE broadcast will also fire; this makes it immediate
+    refreshInboxCount();
+    openNote(r.slug);                // read what you just wrote
+  } catch (e) {
+    err.textContent = String(e.message || e); err.hidden = false;
+  } finally { btn.disabled = false; btn.textContent = "write it"; }
+}
+document.getElementById("newBtn").addEventListener("click", () => openComposer());
+document.getElementById("cmpX").addEventListener("click", closeComposer);
+document.getElementById("cmpSave").addEventListener("click", saveNote);
+document.getElementById("composer").addEventListener("click", (e) => { if (e.target.id === "composer") closeComposer(); });
+document.getElementById("cmpBody").addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); saveNote(); }
+});
+
 // ── Inbox: the captures nobody wove in ──────────────────────────────────────
 // Four tools now capture INTO this vault, and every capture lands untagged and
 // unlinked. This is the maintenance loop, made one-click: for each stranded note,
@@ -733,7 +836,9 @@ cv.addEventListener("mousedown",e=>{markUsed();downX=e.clientX;downY=e.clientY;
 addEventListener("mouseup",e=>{
   if(miniDrag){miniDrag=false;cv.classList.remove("drag");return;}
   if(dragging){dragging.pinned=true;savePins();}
-  else if(pendingDrag){if(pathMode)pathPick(pendingDrag);else if(!pendingDrag.ghost)openNote(pendingDrag.id);}
+  else if(pendingDrag){if(pathMode)pathPick(pendingDrag);
+    else if(pendingDrag.ghost)openComposer(pendingDrag.title,{ghost:true});   // an unwritten note is an invitation, not a dead end
+    else openNote(pendingDrag.id);}
   else if(!pathMode&&Math.hypot(e.clientX-downX,e.clientY-downY)<5){closePanel();hovered=null;}
   pendingDrag=null;dragging=null;panning=false;cv.classList.remove("drag");});
 cv.addEventListener("dblclick",e=>{const n=nodeAt(e.clientX,e.clientY);markUsed();
@@ -894,7 +999,12 @@ q.addEventListener("keydown",e=>{if(!matches.length)return;
   else if(e.key==="ArrowUp"){e.preventDefault();selIdx=(selIdx-1+matches.length)%matches.length;hovered=matches[selIdx].node;drawResults(q.value.trim());}
   else if(e.key==="Enter"&&selIdx>=0){openNote(matches[selIdx].slug);closeResults();q.blur();}});
 document.addEventListener("click",e=>{if(!e.target.closest(".search"))closeResults();});
-addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement!==q){e.preventDefault();q.focus();}
+const typing=()=>{const t=document.activeElement;return t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT");};
+addEventListener("keydown",e=>{
+  // the composer owns the keyboard while it is open — a "/" belongs in the note, not the search box
+  if(!document.getElementById("composer").hidden){ if(e.key==="Escape")closeComposer(); return; }
+  if(e.key==="/"&&document.activeElement!==q){e.preventDefault();q.focus();}
+  else if(e.key==="n"&&!typing()){e.preventDefault();openComposer();}
   else if(e.key==="Escape"){if(pathMode)exitPathMode();exitFocus();closeResults();closePanel();closeInbox();q.blur();hovered=null;clearFilters();}
   else if(e.key==="ArrowLeft"&&panel.classList.contains("open")&&navStack.length&&document.activeElement!==q){e.preventDefault();goBack();}
   else if((e.key==="+"||e.key==="=")&&document.activeElement!==q)zoomBy(1.3);

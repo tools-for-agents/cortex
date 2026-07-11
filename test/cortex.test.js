@@ -167,3 +167,40 @@ test('triage: the inbox finds captures nobody wove in, and weave fixes them', ()
   assert.throws(() => cx.weave('why-token-budgets-win', {}), /nothing to weave/);
   assert.ok(cx.triage({ limit: 'abc' }).items.length <= 12, 'a bad limit falls back');
 });
+
+test('serve: POST /api/note writes a note — and writing a ghost heals the broken link', async () => {
+  const server = createCortexServer();
+  await new Promise((r) => server.listen(0, r));
+  const base = `http://localhost:${server.address().port}`;
+  const post = (body) => fetch(base + '/api/note', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  try {
+    // a note that links to something nobody has written → a ghost in the graph
+    cx.write('Consensus', { type: 'concept', body: 'Replicas agree. See [[Raft]].' });
+    const before = cx.graphData();
+    const ghost = before.nodes.find((n) => n.ghost && /raft/i.test(n.title));
+    assert.ok(ghost, 'the unwritten target shows up as a ghost');
+    assert.ok(before.edges.some((e) => e.target === ghost.id), 'and something already links to it');
+
+    assert.equal((await post({ title: '' })).status, 400, 'a title is required');
+
+    // write the ghost — exactly what clicking it in the graph does
+    const r = await post({ title: 'Raft', type: 'concept', tags: ['consensus'],
+      body: 'A consensus algorithm. Elects a leader.' }).then((x) => x.json());
+    assert.equal(r.slug, 'raft');
+    assert.equal(r.action, 'created');
+
+    // the note is real, and the ghost is gone — the broken link healed into an edge
+    const after = cx.graphData();
+    assert.ok(!after.nodes.some((n) => n.ghost && /raft/i.test(n.title)), 'the ghost is gone');
+    const raft = after.nodes.find((n) => n.id === 'raft');
+    assert.ok(raft && !raft.ghost, 'it is a real note now');
+    assert.ok(after.edges.some((e) => e.source === 'consensus' && e.target === 'raft'),
+      'and the link that was broken now points at it');
+
+    const note = cx.read('Raft');
+    assert.ok(note.tags.includes('consensus'));
+    assert.match(note.body, /Elects a leader/);
+  } finally { server.close(); }
+});

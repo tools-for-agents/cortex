@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { graphData, read, search, stats, tags, sync, capture, triage, weave, VAULT } from './core.js';
+import { graphData, read, search, stats, tags, sync, capture, triage, weave, write, VAULT } from './core.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(__dir, '..', 'public', 'index.html');
@@ -68,6 +68,20 @@ export function createCortexServer() {
         const body = await readBody(req);
         const r = weave(body.slug, { tags: body.tags || [], links: body.links || [] });
         broadcast();                                   // the graph is open — let the new edge appear
+        return json(res, 200, r);
+      }
+      // Author a note. GET /api/note reads one; POST writes one — the vault is only
+      // ever rewritten by a request that means to.
+      if (url.pathname === '/api/note' && req.method === 'POST') {
+        const body = await readBody(req);
+        if (!body.title || !String(body.title).trim()) return json(res, 400, { error: 'title is required' });
+        const r = write(String(body.title), {
+          type: body.type || 'note',
+          tags: Array.isArray(body.tags) ? body.tags : undefined,
+          body: String(body.body || ''),
+          append: body.append === true,
+        });
+        broadcast();   // a new note (and any [[links]] it heals) should bloom into an open graph
         return json(res, 200, r);
       }
       if (url.pathname === '/api/triage') return json(res, 200, triage({ limit: q.limit }));
