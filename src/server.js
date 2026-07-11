@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { graphData, read, search, stats, tags, sync, capture, triage, weave, write, VAULT } from './core.js';
+import { graphData, read, search, stats, tags, sync, capture, triage, weave, write, daily, journal, VAULT } from './core.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(__dir, '..', 'public', 'index.html');
@@ -83,6 +83,18 @@ export function createCortexServer() {
         });
         broadcast();   // a new note (and any [[links]] it heals) should bloom into an open graph
         return json(res, 200, r);
+      }
+      // Journal a line into today. Writing, so a POST — a GET must never append to
+      // your day.
+      if (url.pathname === '/api/daily') {
+        if (req.method === 'POST') {
+          const body = await readBody(req);
+          if (!body.text || !String(body.text).trim()) return json(res, 400, { error: 'text is required' });
+          const r = daily(String(body.text));
+          broadcast();
+          return json(res, 200, r);
+        }
+        return json(res, 200, journal({ limit: q.limit }));
       }
       if (url.pathname === '/api/triage') return json(res, 200, triage({ limit: q.limit }));
       if (url.pathname === '/api/graph') return json(res, 200, graphData());

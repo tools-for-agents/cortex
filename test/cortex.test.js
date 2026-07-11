@@ -204,3 +204,43 @@ test('serve: POST /api/note writes a note — and writing a ghost heals the brok
     assert.match(note.body, /Elects a leader/);
   } finally { server.close(); }
 });
+
+test('journal: the day accumulates, and can be read back', async () => {
+  const server = createCortexServer();
+  await new Promise((r) => server.listen(0, r));
+  const base = `http://localhost:${server.address().port}`;
+  const post = (text) => fetch(base + '/api/daily', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+  });
+  try {
+    assert.equal((await post('')).status, 400, 'an empty line is not an entry');
+
+    const today = new Date().toISOString().slice(0, 10);
+    const dayOf = async () => (await fetch(base + '/api/daily').then((r) => r.json()))
+      .journal.find((d) => d.day === today);
+    const before = (await dayOf())?.count ?? 0;      // an earlier test already journalled today
+
+    await post('shipped the journal');
+    await post('found a bug in the ramp');
+
+    const day = await dayOf();
+    assert.ok(day, 'today is in the journal');
+    assert.equal(day.count, before + 2, 'the day ACCUMULATED both entries — the second did not replace the first');
+    assert.deepEqual(day.entries.slice(-2).map((e) => e.text),
+      ['shipped the journal', 'found a bug in the ramp'], 'newest last, in the order they happened');
+    assert.match(day.entries[0].at, /^\d{2}:\d{2}$/, 'each entry is stamped with a time');
+
+    // it is a real note in the vault, and a real node in the graph
+    const note = cx.read(today);
+    assert.match(note.body, /shipped the journal/);
+    assert.match(note.body, /found a bug in the ramp/);
+    assert.ok(cx.graphData().nodes.some((n) => n.id === today && n.type === 'daily'),
+      'today shows up in the graph as a daily note');
+
+    // a GET must never append to your day
+    const total = (await fetch(base + '/api/daily').then((r) => r.json())).entries;
+    await fetch(base + '/api/daily');
+    assert.equal((await fetch(base + '/api/daily').then((r) => r.json())).entries, total,
+      'reading the journal does not write to it');
+  } finally { server.close(); }
+});

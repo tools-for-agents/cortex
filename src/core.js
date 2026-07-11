@@ -389,6 +389,23 @@ export function daily(text) {
   return write(d, { type: 'daily', body });
 }
 
+// The journal, read back. daily() could write a day's entries and nothing could
+// show them: the last leg of cortex's own loop (recall → capture → distil →
+// connect → journal) had no way to be read except by opening the note.
+export function journal({ limit = 14 } = {}) {
+  limit = Number.isFinite(+limit) && +limit > 0 ? Math.min(Math.floor(+limit), 365) : 14;
+  const rows = all(`SELECT slug, title, body, updated FROM notes WHERE type='daily' ORDER BY slug DESC LIMIT ?`, limit);
+  const days = rows.map((r) => {
+    // each entry is "- HH:MM — what happened"; the heading line is not an entry
+    const entries = String(r.body || '').split('\n')
+      .map((l) => /^-\s*(\d{2}:\d{2})\s*—\s*(.+)$/.exec(l.trim()))
+      .filter(Boolean)
+      .map((m) => ({ at: m[1], text: m[2] }));
+    return { day: r.slug, slug: r.slug, updated: r.updated, count: entries.length, entries };
+  });
+  return { days: days.length, entries: days.reduce((a, d) => a + d.count, 0), journal: days };
+}
+
 // ── sync: (re)scan the vault folder into the index (incremental by mtime) ─────
 export function sync({ reindex = false } = {}) {
   mkdirSync(VAULT, { recursive: true });
