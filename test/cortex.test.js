@@ -93,3 +93,45 @@ test('graphData carries each note\'s updated time (the graph\'s time dimension)'
     else assert.ok(n.updated, `${n.id} carries updated`);
   }
 });
+
+// ── serve: capture is the one write the web view exposes ─────────────────────
+const { createCortexServer } = await import('../src/server.js');
+
+test('serve: POST /api/capture writes a note; a GET never can', async () => {
+  const server = createCortexServer();
+  await new Promise((r) => server.listen(0, r));
+  const base = `http://localhost:${server.address().port}`;
+  const post = (body) => fetch(base + '/api/capture', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  try {
+    // a cross-origin POST from recall's page must survive the preflight
+    const pre = await fetch(base + '/api/capture', { method: 'OPTIONS' });
+    assert.equal(pre.status, 204);
+    assert.equal(pre.headers.get('access-control-allow-origin'), '*');
+    assert.match(pre.headers.get('access-control-allow-methods'), /POST/);
+
+    // writing is a POST — a GET must not create anything
+    assert.equal((await fetch(base + '/api/capture')).status, 405, 'a GET cannot write to the brain');
+
+    const r = await post({ text: 'Retrieval fills to a token budget.', title: 'Budgeted retrieval',
+      source: 'http://localhost:7900/#src/core.js:45' }).then((x) => x.json());
+    assert.equal(r.slug, 'budgeted-retrieval');
+    assert.equal(r.action, 'created');
+
+    // it is a real note in the vault: readable, and carrying its source
+    const note = cx.read('Budgeted retrieval');
+    assert.match(note.body, /Retrieval fills to a token budget/);
+    assert.match(note.body, /source: http:\/\/localhost:7900/, 'the capture records where it came from');
+
+    // capturing the same title again appends rather than clobbering the note
+    const again = await post({ text: 'A second passage.', title: 'Budgeted retrieval' }).then((x) => x.json());
+    assert.equal(again.action, 'updated');
+    const grown = cx.read('Budgeted retrieval');
+    assert.match(grown.body, /Retrieval fills to a token budget/, 'the original passage survives');
+    assert.match(grown.body, /A second passage/, 'and the new one is appended');
+
+    // an empty capture is refused, not written as a blank note
+    assert.equal((await post({ text: '' })).status, 400);
+  } finally { server.close(); }
+});

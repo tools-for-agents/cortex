@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { graphData, read, search, stats, tags, sync, VAULT } from './core.js';
+import { graphData, read, search, stats, tags, sync, capture, VAULT } from './core.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(__dir, '..', 'public', 'index.html');
@@ -16,14 +16,40 @@ const json = (res, code, body) => {
   res.end(JSON.stringify(body));
 };
 
-export function serve({ port = process.env.PORT || 7800 } = {}) {
+// The bare HTTP server, with no watcher or keep-alive timer — so a test can
+// listen on an ephemeral port and close it without leaving the loop alive.
+export function createCortexServer() {
   const sse = new Set();                              // live-refresh subscribers
   const broadcast = () => { for (const r of sse) { try { r.write('data: change\n\n'); } catch {} } };
+
+  // Read a JSON request body (capped — a capture is a note, not an upload).
+  const readBody = (req) => new Promise((resolve, reject) => {
+    let data = '', size = 0;
+    req.on('data', (c) => { size += c.length; if (size > 262144) { reject(new Error('body too large')); req.destroy(); } else data += c; });
+    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error('invalid JSON body')); } });
+    req.on('error', reject);
+  });
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const q = Object.fromEntries(url.searchParams);
     try {
+      // The other tools' web views live on their own ports, so a capture from
+      // recall is a cross-origin POST — it needs the preflight to pass.
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, { 'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' });
+        return res.end();
+      }
+      // Capture something into the brain. Writing is a POST — a GET must never
+      // create a note (a prefetch or a stray link would litter the vault).
+      if (url.pathname === '/api/capture') {
+        if (req.method !== 'POST') return json(res, 405, { error: 'use POST' });
+        const body = await readBody(req);
+        const r = capture(body.text, { title: body.title, source: body.source });
+        broadcast();                                   // the graph is open in a tab — let it bloom in live
+        return json(res, 200, r);
+      }
       if (url.pathname === '/') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         return res.end(await readFile(INDEX));
@@ -45,6 +71,14 @@ export function serve({ port = process.env.PORT || 7800 } = {}) {
       json(res, 404, { error: 'not found' });
     } catch (e) { json(res, 400, { error: e.message }); }
   });
+
+  server.sse = sse; server.broadcast = broadcast;
+  return server;
+}
+
+export function serve({ port = process.env.PORT || 7800 } = {}) {
+  const server = createCortexServer();
+  const { sse, broadcast } = server;
 
   server.listen(port, () => {
     sync(); // pick up any on-disk edits at startup
