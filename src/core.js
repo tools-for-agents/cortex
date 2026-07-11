@@ -247,6 +247,57 @@ export function suggest(query, { k = 8 } = {}) {
 }
 
 // ── lint: an actionable health report for the vault (the maintenance loop) ─────
+// ── Inbox: what the vault has taken in but not yet woven in ─────────────────
+// Four tools now capture INTO cortex (recall, lens, anvil, scout) and every
+// capture lands as an untagged, unlinked `source` note. That is a knowledge
+// graph accumulating dead ends. Triage is the maintenance loop, made actionable:
+// for each note that needs weaving, say WHY, and propose what to weave it with —
+// links to the notes it already resembles, and the tags those notes carry.
+export function triage({ limit = 12, stub_chars = 120 } = {}) {
+  limit = Number.isFinite(+limit) && +limit > 0 ? Math.min(Math.floor(+limit), 100) : 12;
+  const rows = all(`SELECT slug, title, type, updated, tags, LENGTH(body) AS chars,
+    (slug NOT IN (SELECT src FROM links)
+     AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)) AS orphan
+    FROM notes ORDER BY updated DESC`);
+
+  const items = [];
+  for (const r of rows) {
+    if (items.length >= limit) break;
+    const tags = JSON.parse(r.tags || '[]');
+    const issues = [];
+    if (r.orphan) issues.push('orphan');          // nothing links to it, it links to nothing
+    if (!tags.length) issues.push('untagged');
+    if (r.chars < stub_chars) issues.push('stub');
+    if (!issues.length) continue;                 // already woven in — not the inbox's problem
+
+    const { suggestions } = suggest(r.slug, { k: 4 });
+    // Tags worth adopting: the ones already carried by the notes it resembles.
+    const counts = {};
+    for (const sg of suggestions) {
+      const row = get('SELECT tags FROM notes WHERE slug=?', sg.slug);
+      for (const t of JSON.parse(row?.tags || '[]')) if (!tags.includes(t)) counts[t] = (counts[t] || 0) + 1;
+    }
+    items.push({
+      slug: r.slug, title: r.title, type: r.type, updated: r.updated, chars: r.chars, tags, issues,
+      suggested_links: suggestions.slice(0, 3),
+      suggested_tags: Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([tag, n]) => ({ tag, n })),
+    });
+  }
+  return { count: items.length, notes: rows.length, items };
+}
+
+// Weave a note in: adopt tags and link it to the notes it belongs with. Files are
+// truth, so this rewrites the note's frontmatter and appends a Related line — and
+// the wikilinks auto-heal into the graph on the next sync, as any [[link]] does.
+export function weave(query, { tags = [], links = [] } = {}) {
+  const slug = requireSlug(query);
+  const n = get('SELECT title FROM notes WHERE slug=?', slug);
+  const titles = links.map((l) => titleOf(l) || l).filter(Boolean);
+  const body = titles.length ? `Related: ${titles.map((t) => `[[${t}]]`).join(' · ')}` : '';
+  if (!tags.length && !titles.length) throw new Error('nothing to weave — pass tags and/or links');
+  return write(n.title, { tags, body, append: true });   // append merges tags and keeps the body
+}
+
 export function lint({ stub_chars = 120, stale_days = 0 } = {}) {
   const orphans = all(`SELECT slug,title FROM notes
     WHERE slug NOT IN (SELECT src FROM links) AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)

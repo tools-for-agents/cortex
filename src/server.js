@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { graphData, read, search, stats, tags, sync, capture, VAULT } from './core.js';
+import { graphData, read, search, stats, tags, sync, capture, triage, weave, VAULT } from './core.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(__dir, '..', 'public', 'index.html');
@@ -62,6 +62,15 @@ export function createCortexServer() {
         req.on('close', () => sse.delete(res));
         return;
       }
+      // Weaving edits notes, so it is a POST — a GET must never rewrite the vault.
+      if (url.pathname === '/api/weave') {
+        if (req.method !== 'POST') return json(res, 405, { error: 'use POST' });
+        const body = await readBody(req);
+        const r = weave(body.slug, { tags: body.tags || [], links: body.links || [] });
+        broadcast();                                   // the graph is open — let the new edge appear
+        return json(res, 200, r);
+      }
+      if (url.pathname === '/api/triage') return json(res, 200, triage({ limit: q.limit }));
       if (url.pathname === '/api/graph') return json(res, 200, graphData());
       if (url.pathname === '/api/note') return json(res, 200, read(q.slug, { max_tokens: +q.tokens || undefined }));
       if (url.pathname === '/api/search') return json(res, 200, search(q.q || '', { k: +q.k || 12 }));

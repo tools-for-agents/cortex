@@ -121,6 +121,29 @@ const tools = [
     inputSchema: { type: 'object', properties: {} },
     run: () => cx.stats(),
   },
+  {
+    name: 'cortex_triage',
+    description: 'The vault inbox: notes that were captured but never woven in — orphans (nothing links to them), untagged, or stubs. '
+      + 'For each, says why it needs attention and proposes what to weave it with: links to the notes it already resembles, and the tags those notes carry. '
+      + 'Run this after capturing, then cortex_weave to act on it.',
+    inputSchema: { type: 'object', properties: { limit: { type: 'number', description: 'How many notes to triage (default 12)' } } },
+    run: (a) => cx.triage({ limit: a.limit }),
+  },
+  {
+    name: 'cortex_weave',
+    description: 'Weave a note into the graph: adopt tags and link it to related notes. Writes the note file (frontmatter tags + a Related line of [[wikilinks]]), so the links heal into the graph like any other.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'The note to weave in (slug or title)' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Tags to adopt' },
+        links: { type: 'array', items: { type: 'string' }, description: 'Slugs/titles to link to' },
+      },
+      required: ['slug'],
+    },
+    run: (a) => cx.weave(a.slug, { tags: a.tags || [], links: a.links || [] }),
+  },
+
 ];
 
 const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]));

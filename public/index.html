@@ -105,6 +105,40 @@
     border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(103%);
     transition:transform .4s cubic-bezier(.19,.66,.28,1);overflow-y:auto;padding:32px 32px 60px;}
   #panel.open{transform:none;}
+  /* ── Inbox: the captures nobody wove in ── */
+  #inbox{position:fixed;top:0;right:0;bottom:0;z-index:31;width:min(452px,93vw);background:var(--panel-solid);
+    border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(103%);
+    transition:transform .4s cubic-bezier(.19,.66,.28,1);overflow-y:auto;padding:32px 32px 60px;}
+  #inbox.open{transform:none;}
+  #inbox .close{position:absolute;top:22px;right:24px;width:32px;height:32px;display:grid;place-items:center;border-radius:9px;color:var(--ink-dim);border:1px solid transparent;cursor:pointer;}
+  #inbox .close:hover{color:var(--ink);border-color:var(--line);background:var(--card);}
+  #inbox h2{font-size:19px;margin:0 0 4px;}
+  #inbox .lede{color:var(--ink-dim);font-size:12.5px;margin-bottom:22px;line-height:1.5;}
+  .ibx{border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin-bottom:12px;background:var(--card);}
+  .ibx .t{font-weight:650;font-size:13.5px;cursor:pointer;}
+  .ibx .t:hover{color:var(--accent-2);}
+  .ibx .why{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0 10px;}
+  .ibx .iss{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:1px 7px;border-radius:20px;
+    color:var(--ink-faint);border:1px solid var(--line);}
+  .ibx .iss.orphan{color:#f0a35e;border-color:color-mix(in srgb,#f0a35e 40%,transparent);}
+  .ibx .iss.untagged{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 40%,transparent);}
+  .ibx .lbl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin:9px 0 5px;}
+  .ibx .row{display:flex;gap:5px;flex-wrap:wrap;}
+  .ibx .sg{font-size:11.5px;padding:3px 9px;border-radius:20px;cursor:pointer;background:transparent;
+    border:1px solid var(--line);color:var(--ink-dim);transition:color .12s,border-color .12s;}
+  .ibx .sg:hover{color:var(--accent-2);border-color:var(--accent-2);}
+  .ibx .sg.on{color:var(--accent-2);border-color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 12%,transparent);}
+  .ibx .weave{margin-top:11px;width:100%;padding:6px 0;border-radius:9px;cursor:pointer;font-size:12px;font-weight:600;
+    color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 12%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent-2) 40%,transparent);}
+  .ibx .weave:hover{background:color-mix(in srgb,var(--accent-2) 22%,transparent);}
+  .ibx .weave:disabled{opacity:.5;cursor:default;}
+  .ibx.done{opacity:.5;}
+  #inbox .empty{color:var(--ink-dim);font-size:13px;}
+  #controls button .badge{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;
+    border-radius:20px;background:var(--accent-2);color:#0b0d16;font-size:10px;font-weight:700;
+    display:grid;place-items:center;line-height:1;}
+  #controls button{position:relative;}
   #panel .close{position:absolute;top:22px;right:24px;width:32px;height:32px;display:grid;place-items:center;border-radius:9px;color:var(--ink-dim);border:1px solid transparent;}
   #panel .close:hover{color:var(--ink);border-color:var(--line);background:var(--card);}
   #panel .kicker{font-size:10px;letter-spacing:.24em;text-transform:uppercase;font-weight:600;}
@@ -210,6 +244,7 @@
   <button data-act="theme" title="Toggle theme" aria-label="Toggle theme"><svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4l1.4-1.4M18 6l1.4-1.4"/></svg></button>
   <button data-act="path" id="pathBtn" title="Find the path between two notes" aria-label="Find the path between two notes" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="18.5" r="2.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="5.5" r="2.4" fill="currentColor" stroke="none"/><path d="M8 16.2C10 14 10.5 8 16 7"/></svg></button>
   <button data-act="heat" id="heatBtn" title="Shade notes by how recently they were updated" aria-label="Shade notes by how recently they were updated" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.2l3.4 2"/></svg></button>
+  <button data-act="inbox" id="inboxBtn" title="Inbox — captures that were never woven in" aria-label="Inbox — captures that were never woven in"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h4l2 3h6l2-3h4"/><path d="M5.5 5h13l2.5 8v5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18v-5z"/></svg><span class="badge" id="inboxCount" hidden></span></button>
   <div class="sep"></div>
   <button data-act="export" title="Download graph as PNG" aria-label="Download graph as PNG"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11M8 11l4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></button>
 </div>
@@ -226,6 +261,7 @@
 <div id="tagfilter"></div>
 <div id="tip"></div>
 <aside id="panel"><div class="close" id="px" role="button" tabindex="0" aria-label="Close">×</div><div id="pb"></div></aside>
+<aside id="inbox" aria-label="Inbox"><div class="close" id="ix" role="button" tabindex="0" aria-label="Close">×</div><div id="ib"></div></aside>
 
 <script>
 "use strict";
@@ -533,6 +569,87 @@ function syncHeatScale(){
   el.classList.add("show");lg.style.display="none";
 }
 
+// ── Inbox: the captures nobody wove in ──────────────────────────────────────
+// Four tools now capture INTO this vault, and every capture lands untagged and
+// unlinked. This is the maintenance loop, made one-click: for each stranded note,
+// say why, propose what it belongs with, and weave it in.
+let inboxItems = [], inboxPick = {};   // slug → { tags:Set, links:Set }
+async function refreshInboxCount() {
+  try {
+    const t = await fetch("/api/triage?limit=50").then(r => r.json());
+    const n = t.count || 0;
+    const b = document.getElementById("inboxCount");
+    b.textContent = n > 99 ? "99+" : String(n);
+    b.hidden = n === 0;
+  } catch {}
+}
+async function openInbox() {
+  const el = document.getElementById("inbox");
+  el.classList.add("open");
+  const ib = document.getElementById("ib");
+  ib.innerHTML = '<h2>Inbox</h2><div class="lede">Loading…</div>';
+  const t = await fetch("/api/triage?limit=25").then(r => r.json());
+  inboxItems = t.items; inboxPick = {};
+  ib.innerHTML = `<h2>Inbox</h2>
+    <div class="lede">${t.count ? `${t.count} of ${t.notes} note${t.notes === 1 ? "" : "s"} arrived but were never woven in — no links, no tags. Pick what each belongs with.` : ""}</div>
+    ${t.items.map(itemHtml).join("") || '<div class="empty">Nothing stranded. Every note is tagged and connected.</div>'}`;
+}
+function closeInbox() { document.getElementById("inbox").classList.remove("open"); }
+function itemHtml(it) {
+  const tags = it.suggested_tags.map(s => `<button class="sg" data-tag="${esc(s.tag)}" data-slug="${esc(it.slug)}">#${esc(s.tag)}</button>`).join("");
+  const links = it.suggested_links.map(s => `<button class="sg" data-link="${esc(s.slug)}" data-slug="${esc(it.slug)}">${esc(s.title)}</button>`).join("");
+  return `<div class="ibx" data-item="${esc(it.slug)}">
+    <div class="t" data-open="${esc(it.slug)}">${esc(it.title)}</div>
+    <div class="why">${it.issues.map(i => `<span class="iss ${esc(i)}">${esc(i)}</span>`).join("")}</div>
+    ${tags ? `<div class="lbl">tags its neighbours carry</div><div class="row">${tags}</div>` : ""}
+    ${links ? `<div class="lbl">notes it resembles</div><div class="row">${links}</div>` : ""}
+    ${(tags || links) ? `<button class="weave" data-weave="${esc(it.slug)}" disabled>select what it belongs with</button>`
+      : '<div class="lbl">nothing to suggest — this note stands alone</div>'}
+  </div>`;
+}
+function syncWeaveBtn(slug) {
+  const pick = inboxPick[slug] || { tags: new Set(), links: new Set() };
+  const btn = document.querySelector(`[data-weave="${CSS.escape(slug)}"]`);
+  if (!btn) return;
+  const n = pick.tags.size + pick.links.size;
+  btn.disabled = n === 0;
+  btn.textContent = n === 0 ? "select what it belongs with"
+    : `weave in — ${[pick.tags.size && `${pick.tags.size} tag${pick.tags.size > 1 ? "s" : ""}`,
+        pick.links.size && `${pick.links.size} link${pick.links.size > 1 ? "s" : ""}`].filter(Boolean).join(" · ")}`;
+}
+document.getElementById("inbox").addEventListener("click", async (e) => {
+  if (e.target.closest("#ix")) return closeInbox();
+  const open = e.target.closest("[data-open]");
+  if (open) { closeInbox(); openNote(open.dataset.open); return; }
+
+  const chip = e.target.closest("[data-tag],[data-link]");
+  if (chip) {
+    const slug = chip.dataset.slug;
+    const pick = (inboxPick[slug] ||= { tags: new Set(), links: new Set() });
+    const set = chip.dataset.tag ? pick.tags : pick.links;
+    const val = chip.dataset.tag || chip.dataset.link;
+    set.has(val) ? set.delete(val) : set.add(val);
+    chip.classList.toggle("on", set.has(val));
+    syncWeaveBtn(slug);
+    return;
+  }
+  const wv = e.target.closest("[data-weave]");
+  if (wv) {
+    const slug = wv.dataset.weave, pick = inboxPick[slug];
+    if (!pick || (!pick.tags.size && !pick.links.size)) return;
+    wv.disabled = true; wv.textContent = "weaving…";
+    try {
+      const res = await fetch("/api/weave", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, tags: [...pick.tags], links: [...pick.links] }) });
+      if (!res.ok) throw new Error("refused");
+      wv.textContent = "✓ woven in";
+      wv.closest(".ibx").classList.add("done");     // it leaves the inbox on the next open
+      refreshInboxCount();
+    } catch { wv.disabled = false; wv.textContent = "failed — try again"; }
+  }
+});
+document.getElementById("ix").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); closeInbox(); } });
+
 // ── path finder: BFS shortest path between two notes over the [[wikilink]] graph ──
 let pathMode=false,pathA=null,pathState=null;
 const pairKey=(a,b)=>a<b?a+"|"+b:b+"|"+a;
@@ -649,6 +766,7 @@ document.getElementById("controls").addEventListener("click",e=>{const b=e.targe
   else if(a==="export")exportPNG();
   else if(a==="path")togglePathMode();
   else if(a==="heat")toggleHeat();
+  else if(a==="inbox")openInbox();
   else if(a==="fit"){userInteracted=false;closePanel();clearFilters();exitPathMode();fit(null,true);}
   else if(a==="theme"){const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",cur==="dark"?"light":"dark");}});
 // export the current graph view as a high-res PNG (branded) — share your brain map
@@ -777,7 +895,7 @@ q.addEventListener("keydown",e=>{if(!matches.length)return;
   else if(e.key==="Enter"&&selIdx>=0){openNote(matches[selIdx].slug);closeResults();q.blur();}});
 document.addEventListener("click",e=>{if(!e.target.closest(".search"))closeResults();});
 addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement!==q){e.preventDefault();q.focus();}
-  else if(e.key==="Escape"){if(pathMode)exitPathMode();exitFocus();closeResults();closePanel();q.blur();hovered=null;clearFilters();}
+  else if(e.key==="Escape"){if(pathMode)exitPathMode();exitFocus();closeResults();closePanel();closeInbox();q.blur();hovered=null;clearFilters();}
   else if(e.key==="ArrowLeft"&&panel.classList.contains("open")&&navStack.length&&document.activeElement!==q){e.preventDefault();goBack();}
   else if((e.key==="+"||e.key==="=")&&document.activeElement!==q)zoomBy(1.3);
   else if(e.key==="-"&&document.activeElement!==q)zoomBy(1/1.3);
@@ -801,12 +919,12 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme)
 
 // ── boot ──────────────────────────────────────────────────────────────────────
 resize();applyTheme();
-(async()=>{await loadGraph();alpha=1;for(let i=0;i<420;i++)step();alpha=0;fit();if(reduceMotion)intro=1;requestAnimationFrame(frame);openFromHash();})();
+(async()=>{await loadGraph();alpha=1;for(let i=0;i<420;i++)step();alpha=0;fit();if(reduceMotion)intro=1;requestAnimationFrame(frame);openFromHash();refreshInboxCount();})();
 // deep-link: open a note by slug from the URL hash (e.g. "#recall"), so other tools can link straight to it
 function openFromHash(){const s=decodeURIComponent(location.hash.slice(1));if(s&&bySlug.has(s)&&!bySlug.get(s).ghost)openNote(s);}
 addEventListener("hashchange",openFromHash);
 // live refresh: re-fetch the graph when the server signals a vault change (keeps positions, gently re-settles)
-try{const es=new EventSource("/api/events");es.onmessage=()=>refreshGraph();}catch(e){}
+try{const es=new EventSource("/api/events");es.onmessage=()=>{refreshGraph();refreshInboxCount();};}catch(e){}
 
 
 

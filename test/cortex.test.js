@@ -135,3 +135,35 @@ test('serve: POST /api/capture writes a note; a GET never can', async () => {
     assert.equal((await post({ text: '' })).status, 400);
   } finally { server.close(); }
 });
+
+test('triage: the inbox finds captures nobody wove in, and weave fixes them', () => {
+  // a well-connected corner of the vault, so there is something to suggest
+  cx.write('Token Budgets', { type: 'concept', tags: ['retrieval', 'agents'], body: 'Retrieval fills to a token budget so an agent pulls just enough context.' });
+  cx.write('Retrieval', { type: 'concept', tags: ['retrieval'], body: 'Fetch relevant chunks. See [[Token Budgets]].' });
+
+  // …and a capture that landed like every capture does: untagged, unlinked
+  cx.capture('Retrieval that respects a token budget beats reading whole files.',
+    { title: 'Why token budgets win', source: 'http://localhost:7950/#x' });
+
+  const t = cx.triage({ limit: 20 });
+  const item = t.items.find((i) => i.slug === 'why-token-budgets-win');
+  assert.ok(item, 'the fresh capture shows up in the inbox');
+  assert.ok(item.issues.includes('orphan'), 'nothing links to it');
+  assert.ok(item.issues.includes('untagged'), 'and it carries no tags');
+  assert.ok(item.suggested_links.some((s) => s.slug === 'token-budgets'), 'suggests the note it resembles');
+  assert.ok(item.suggested_tags.some((s) => s.tag === 'retrieval'), 'suggests a tag its neighbours carry');
+
+  // weaving it in is a real edit to the file, not a report
+  cx.weave('why-token-budgets-win', { tags: ['retrieval'], links: ['token-budgets'] });
+  const n = cx.read('Why token budgets win');
+  assert.ok(n.tags.includes('retrieval'), 'the tag is adopted');
+  assert.match(n.body, /\[\[Token Budgets\]\]/, 'and the note now links out');
+  assert.match(n.body, /token budget beats reading whole files/, 'without losing what was captured');
+
+  // …so it drops out of the inbox
+  const after = cx.triage({ limit: 20 });
+  assert.ok(!after.items.some((i) => i.slug === 'why-token-budgets-win'), 'a woven note leaves the inbox');
+
+  assert.throws(() => cx.weave('why-token-budgets-win', {}), /nothing to weave/);
+  assert.ok(cx.triage({ limit: 'abc' }).items.length <= 12, 'a bad limit falls back');
+});
