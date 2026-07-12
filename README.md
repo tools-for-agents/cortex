@@ -150,3 +150,24 @@ node src/cli.js serve
 - **The graph** is a link table. Every `[[target]]` is resolved to a note by slug, title or alias; unresolved targets are kept as broken links and heal automatically when the target note appears.
 - **Slugs** are unicode-aware (Turkish and accented titles transliterate to clean ascii filenames).
 - **Obsidian-compatible** end to end: open `$CORTEX_VAULT` as a vault and the wikilinks, tags and graph view all just work.
+
+## The agent toolkit
+
+`cortex` is the **remember** leg of **[tools-for-agents](https://tools-for-agents.github.io)** — an operating system for agents.
+Seven zero-dependency, MCP-native tools that form one loop:
+
+| | | |
+|---|---|---|
+| 🛰️ | [agent-hq](https://github.com/tools-for-agents/agent-hq) | coordinate — shared memory, a kanban agents claim work from, a registry, a cost ledger |
+| 🔎 | [lens](https://github.com/tools-for-agents/lens) | read code — token-budgeted retrieval — search, outlines, surgical reads |
+| ⚒ | [anvil](https://github.com/tools-for-agents/anvil) | run safely — a throwaway Docker sandbox: network off, capped, timed |
+| 🧠 | **cortex** | **remember** — an Obsidian-compatible second brain, wikilinked |
+| 🧭 | [scout](https://github.com/tools-for-agents/scout) | read the web — a URL becomes clean, cached, searchable markdown |
+| 🎯 | [recall](https://github.com/tools-for-agents/recall) | recall it all — one query across brain, team, reading and code |
+| 👁 | [iris](https://github.com/tools-for-agents/iris) | see — look at what you built, before you claim it works |
+
+**Reading this as an agent?** [`/llms.txt`](https://tools-for-agents.github.io/llms.txt) is the map, and
+[`/tools.json`](https://tools-for-agents.github.io/tools.json) hands you all **67 MCP tools** — every name, every
+description, every install command — in **one fetch**, without cloning anything.
+
+MIT licensed.
