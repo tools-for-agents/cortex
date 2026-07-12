@@ -5,7 +5,7 @@
 // back out — a durable memory that a human can also open in Obsidian.
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, basename } from 'node:path';
-import { db, get, all, run, VAULT } from './db.js';
+import { writeDb, get, all, run, VAULT, storeExists } from './db.js';
 import { slugify, parseFrontmatter, serializeFrontmatter, parseLinks, parseTags, estTokens } from './notes.js';
 
 export { VAULT };
@@ -75,7 +75,7 @@ function rebuildLinks() {
     for (const a of JSON.parse(r.aliases || '[]')) map.set(slugify(a), r.slug);
   }
   run('DELETE FROM links');
-  const ins = db.prepare('INSERT OR IGNORE INTO links (src,target,dst) VALUES (?,?,?)');
+  const ins = writeDb().prepare('INSERT OR IGNORE INTO links (src,target,dst) VALUES (?,?,?)');
   for (const r of all('SELECT slug, body FROM notes'))
     for (const target of parseLinks(r.body || ''))
       ins.run(r.slug, target, map.get(slugify(target)) || null);

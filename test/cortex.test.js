@@ -288,3 +288,49 @@ test('lint: the vault can tell you it is decaying — and writing the note heals
     assert.ok('stale_count' in stale);
   } finally { server.close(); }
 });
+
+// ── A read must not create the thing it is reading ──────────────────────────────
+test('asking a question does not leave a vault behind in someone else\'s directory', async (t) => {
+  const { mkdtempSync, rmSync, readdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, resolve } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+
+  // db.js used to open the database AT IMPORT — mkdir, create the file, run the schema —
+  // so merely ASKING A QUESTION brought the vault into existence. Run `cortex search` in a
+  // home directory and you left a vault/ in it. And the empty vault you had just created
+  // then answered the question, with nothing, which reads as "that is not in your second
+  // brain". A tool should not litter, and it should not invent the evidence for its own answer.
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-nolitter-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const cli = resolve(import.meta.dirname, '..', 'src', 'cli.js');
+  const r = spawnSync('node', [cli, 'search', 'anything'], {
+    cwd: dir, encoding: 'utf8', env: { ...process.env, CORTEX_VAULT: join(dir, 'vault') },
+  });
+
+  assert.equal(r.status, 0, 'the question is answered');
+  assert.match(r.stdout, /0 hits of 0 notes/, 'and the answer carries the size of the haystack');
+  assert.match(r.stdout, /vault is empty/, 'and says the vault is empty, rather than implying you know nothing');
+  assert.deepEqual(readdirSync(dir), [], 'and NOTHING was created — the directory is exactly as it was');
+});
+
+test('...but a write still brings the vault into being', async (t) => {
+  const { mkdtempSync, rmSync, existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, resolve } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-firstrun-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const cli = resolve(import.meta.dirname, '..', 'src', 'cli.js');
+  const env = { ...process.env, CORTEX_VAULT: join(dir, 'vault') };
+
+  // A write is a statement of intent, so it may create. First run must work.
+  const w = spawnSync('node', [cli, 'write', 'First note', '--body', 'hello'], { cwd: dir, encoding: 'utf8', env });
+  assert.equal(w.status, 0, 'the first write succeeds on a machine with no vault');
+  assert.ok(existsSync(join(dir, 'vault')), 'and the vault now exists');
+
+  const s = spawnSync('node', [cli, 'search', 'hello'], { cwd: dir, encoding: 'utf8', env });
+  assert.match(s.stdout, /1 hits of 1 note/, 'and the note is findable');
+});
