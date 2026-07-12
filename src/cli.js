@@ -43,7 +43,11 @@ try {
     const r = cx.search(arg() || '', { k: +flag('-k', 8), max_tokens: +flag('--tokens', 1800),
       tag: flag('--tag'), type: flag('--type') });
     for (const x of r.results) out(`\n▸ ${x.title}  [${x.type}]  (${x.slug})  score=${x.score}\n  ${x.excerpt}`);
-    out(`\n— ${r.count} hits, ~${r.tokens} tokens —`);
+    // Say the size of the haystack. "0 hits" and "0 hits out of 0 notes" mean opposite
+    // things, and only one of them tells you the vault path is wrong.
+    const hay = r.searched ? ` of ${r.searched.notes} note${r.searched.notes === 1 ? '' : 's'}` : '';
+    out(`\n— ${r.count} hits${hay}, ~${r.tokens} tokens —`);
+    if (r.searched && r.searched.notes === 0) out(`  the vault is empty: ${r.searched.vault}`);
   } else if (cmd === 'links') {
     out(cx.linksOf(arg(), { direction: has('--in') ? 'in' : has('--out') ? 'out' : 'both' }));
   } else if (cmd === 'related') {

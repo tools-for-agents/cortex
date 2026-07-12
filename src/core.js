@@ -161,9 +161,25 @@ function ftsQuery(q) {
   return terms.length ? terms.map((t) => `"${t}"`).join(' OR ') : null;
 }
 
+
+// AN EMPTY RESULT MUST CARRY THE SIZE OF THE HAYSTACK.
+//
+// "0 hits" and "0 hits, out of 0 things I have ever seen" are the same sentence to a
+// caller, and they mean opposite things. Opening a missing store CREATES it, so a search
+// against a vault/cache that does not exist answered, confidently: "— 0 hits —". An agent
+// asking "what do I know about X" was told NOTHING, when the truth was there is nothing
+// here to know it FROM. It believes that and moves on.
+//
+// So say what was searched. "0 of 0 notes" makes a misconfigured path obvious at a glance;
+// "0 of 500 notes" is a real answer to a real question.
+function corpus() {
+  try { return get(`SELECT COUNT(*) n FROM notes`).n; } catch { return 0; }
+}
+
 export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
+  const searched = { notes: corpus(), vault: VAULT };
   const m = ftsQuery(query);
-  if (!m) return { query, count: 0, tokens: 0, results: [] };
+  if (!m) return { query, searched, count: 0, tokens: 0, results: [] };
   let sql = `SELECT n.slug, n.title, n.type, n.tags,
                snippet(notes_fts, 3, '⟦', '⟧', ' … ', 16) AS snip, bm25(notes_fts) AS score
              FROM notes_fts JOIN notes n ON n.slug = notes_fts.slug
@@ -185,7 +201,7 @@ export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
       score: Math.round(r.score * 1000) / 1000, tokens: tk, excerpt });
     tokens += tk;
   }
-  return { query, count: results.length, tokens, results };
+  return { query, searched, count: results.length, tokens, results };
 }
 
 // ── links: backlinks (in), forward links (out), or both ───────────────────────
