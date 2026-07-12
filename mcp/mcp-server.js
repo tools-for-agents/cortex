@@ -146,6 +146,36 @@ const tools = [
 
 ];
 
+// ── What each tool does to the world ───────────────────────────────────────────
+// MCP tool annotations (spec 2025-11-25). The spec's defaults are PESSIMISTIC: with no
+// annotations at all, every tool here — including the pure reads — is declared
+// destructive and open-world, and a conformant client should warn before each call.
+// You do not become safe by omission. You become safe by saying so.
+//
+//   readOnlyHint    the tool changes nothing        → the client can skip the confirmation
+//   destructiveHint it may overwrite or delete      → the client should warn first
+//   idempotentHint  calling twice changes no more   → safe to retry on failure
+//   openWorldHint   it reaches, or returns content from, outside our trust boundary
+//                   (the web; the output of arbitrary code) → scrutinise what comes back
+const ANNOTATIONS = {
+  cortex_search: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_read: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_links: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_related: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_suggest: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_lint: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_tags: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_graph: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_recent: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_stats: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_triage: {"readOnlyHint": true, "openWorldHint": false},
+  cortex_write: {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false},
+  cortex_weave: {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false},
+  cortex_capture: {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
+  cortex_daily: {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
+  cortex_sync: {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+};
+
 const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]));
 const send = (m) => process.stdout.write(JSON.stringify(m) + '\n');
 const reply = (id, result) => send({ jsonrpc: '2.0', id, result });
@@ -159,7 +189,7 @@ async function handle(msg) {
   if (method === 'notifications/initialized' || method === 'notifications/cancelled') return;
   if (method === 'ping') return reply(id, {});
   if (method === 'tools/list')
-    return reply(id, { tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+    return reply(id, { tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema, annotations: ANNOTATIONS[name] })) });
   if (method === 'tools/call') {
     const tool = toolMap[params?.name];
     if (!tool) return fail(id, -32602, `unknown tool: ${params?.name}`);
