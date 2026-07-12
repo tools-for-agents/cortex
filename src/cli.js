@@ -67,6 +67,9 @@ try {
     serve({ port: +flag('--port', 7800) });
   } else if (cmd === 'stats') {
     out(cx.stats());
+  } else if (cmd === 'mcp') {
+    // stdio JSON-RPC. The server starts on import: `npx @tools-for-agents/cortex mcp`
+    await import('../mcp/mcp-server.js');
   } else {
     out(`cortex — a local, Obsidian-compatible second brain for agents
 
