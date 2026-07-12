@@ -35,6 +35,21 @@ const notes = [
 ];
 
 let n = 0;
+// ── The rows a tidy seed never has, and a real vault always does ──────────────
+// The graph view renders whatever the seed writes, so a seed of short ASCII titles proves
+// only that short ASCII titles render. Real notes carry URLs (unbroken strings that
+// word-wrap cannot break — the classic way a card blows out of its container) and are not
+// all written in English. Put them in the seed, so iris proves it on every build instead
+// of on the day someone tries it by hand.
+notes.push(
+  ['Retrieval on a token budget', 'concept', ['agents', 'retrieval'],
+   'An agent pulls just enough context, never a whole file. Source: '
+   + 'https://github.com/tools-for-agents/lens/blob/main/src/core.js#L156-L188-search-token-budget '
+   + '— an unbroken string with nowhere to wrap. See [[lens]].'],
+  ['漢字と emoji 🧠 ve Türkçe: şğüıöç', 'concept', ['i18n'],
+   'The team does not write in ASCII. CJK has no spaces to wrap at, and emoji change the line height of the text beside them. See [[cortex]].'],
+);
+
 for (const [title, type, tags, body] of notes) { write(title, { type, tags, body }); n++; }
 const g = graphData();
 console.log(`seeded ${n} notes → ${g.stats.notes} nodes, ${g.stats.links} links in ${VAULT}`);
