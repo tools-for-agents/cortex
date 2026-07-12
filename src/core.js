@@ -151,7 +151,7 @@ export function read(query, { max_tokens } = {}) {
   return { slug, title: n.title, type: n.type, path: n.path,
     tags: JSON.parse(n.tags || '[]'), aliases: JSON.parse(n.aliases || '[]'),
     created: n.created, updated: n.updated,
-    backlinks: get('SELECT COUNT(DISTINCT src) n FROM links WHERE dst=?', slug).n,
+    backlinks: get('SELECT COUNT(DISTINCT src) n FROM links WHERE dst=?', slug)?.n ?? 0,
     tokens: estTokens(body), truncated, body };
 }
 
@@ -173,7 +173,7 @@ function ftsQuery(q) {
 // So say what was searched. "0 of 0 notes" makes a misconfigured path obvious at a glance;
 // "0 of 500 notes" is a real answer to a real question.
 function corpus() {
-  try { return get(`SELECT COUNT(*) n FROM notes`).n; } catch { return 0; }
+  try { return get(`SELECT COUNT(*) n FROM notes`)?.n ?? 0; } catch { return 0; }
 }
 
 export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
@@ -231,7 +231,7 @@ export function related(query, { k = 8 } = {}) {
   for (const r of all('SELECT src FROM links WHERE dst=?', slug)) bump(r.src, 3, 'linked-from');
   for (const r of all(`SELECT DISTINCT b.src FROM links a JOIN links b ON a.dst=b.dst
                        WHERE a.src=? AND b.src<>? AND a.dst IS NOT NULL`, slug, slug)) bump(r.src, 1, 'co-cites');
-  for (const t of JSON.parse(get('SELECT tags FROM notes WHERE slug=?', slug).tags || '[]'))
+  for (const t of JSON.parse(get('SELECT tags FROM notes WHERE slug=?', slug)?.tags || '[]'))
     for (const r of all('SELECT slug FROM notes WHERE tags LIKE ?', `%"${t}"%`)) bump(r.slug, 1, `#${t}`);
   const ranked = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, k)
     .map(([s, pts]) => ({ slug: s, title: titleOf(s), score: pts, reasons: [...why.get(s)] }));
@@ -358,9 +358,9 @@ export function graph() {
   const broken = all('SELECT src,target FROM links WHERE dst IS NULL ORDER BY target')
     .map((r) => ({ from: titleOf(r.src), target: r.target }));
   return {
-    notes: get('SELECT COUNT(*) n FROM notes').n,
-    links: get('SELECT COUNT(*) n FROM links').n,
-    resolved: get('SELECT COUNT(*) n FROM links WHERE dst IS NOT NULL').n,
+    notes: get('SELECT COUNT(*) n FROM notes')?.n ?? 0,
+    links: get('SELECT COUNT(*) n FROM links')?.n ?? 0,
+    resolved: get('SELECT COUNT(*) n FROM links WHERE dst IS NOT NULL')?.n ?? 0,
     broken_count: broken.length,
     orphan_count: orphanRows.length,
     hubs: all(`SELECT dst slug, COUNT(*) n FROM links WHERE dst IS NOT NULL
@@ -401,7 +401,7 @@ export function daily(text) {
   const stamp = new Date().toISOString().slice(11, 16);
   const line = `- ${stamp} — ${String(text).trim()}`;
   const slug = resolveSlug(d);
-  const body = slug ? `${get('SELECT body FROM notes WHERE slug=?', slug).body}\n${line}` : `# ${d}\n\n${line}`;
+  const body = slug ? `${get('SELECT body FROM notes WHERE slug=?', slug)?.body ?? ''}\n${line}` : `# ${d}\n\n${line}`;
   return write(d, { type: 'daily', body });
 }
 
@@ -440,17 +440,17 @@ export function sync({ reindex = false } = {}) {
   let removed = 0;
   for (const r of all('SELECT slug FROM notes')) if (!seen.has(r.slug)) { deleteNote(r.slug); removed++; }
   rebuildLinks();
-  return { indexed, skipped, removed, total: get('SELECT COUNT(*) n FROM notes').n };
+  return { indexed, skipped, removed, total: get('SELECT COUNT(*) n FROM notes')?.n ?? 0 };
 }
 
 export function stats() {
   return {
     vault: VAULT,
-    notes: get('SELECT COUNT(*) n FROM notes').n,
-    links: get('SELECT COUNT(*) n FROM links').n,
-    broken_links: get('SELECT COUNT(*) n FROM links WHERE dst IS NULL').n,
+    notes: get('SELECT COUNT(*) n FROM notes')?.n ?? 0,
+    links: get('SELECT COUNT(*) n FROM links')?.n ?? 0,
+    broken_links: get('SELECT COUNT(*) n FROM links WHERE dst IS NULL')?.n ?? 0,
     tags: tags().total,
     types: all('SELECT type, COUNT(*) n FROM notes GROUP BY type ORDER BY n DESC'),
-    last_updated: get('SELECT MAX(updated) m FROM notes').m,
+    last_updated: get('SELECT MAX(updated) m FROM notes')?.m ?? null,
   };
 }

@@ -387,3 +387,27 @@ test('nothing the MCP server can reach is allowed to print to stdout', async () 
   assert.deepEqual(offenders, [],
     'stdout is the protocol — one stray print desyncs every agent session:\n  ' + offenders.join('\n  '));
 });
+
+// ── The state my machine never enters ───────────────────────────────────────────
+test('a brand-new user, with no vault at all, can still run every read command', async (t) => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, resolve } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+
+  // Same bug as scout's: a read no longer creates the store, so `get()` returns undefined
+  // and `.n` on it throws. `cortex graph` — the data behind the tool's headline feature —
+  // died on an empty vault, and the tests never noticed because they all seed first.
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-firstrun-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const cli = resolve(import.meta.dirname, '..', 'src', 'cli.js');
+  const env = { ...process.env, CORTEX_VAULT: join(dir, 'vault') };
+
+  for (const args of [['stats'], ['graph'], ['lint'], ['tags'], ['recent'], ['triage']]) {
+    const r = spawnSync('node', [cli, ...args], { encoding: 'utf8', env });
+    const said = r.stdout + r.stderr;
+    assert.doesNotMatch(said, /TypeError|Cannot read properties/,
+      `\`cortex ${args.join(' ')}\` on an empty vault must not crash; got: ${said.slice(0, 120)}`);
+    assert.equal(r.status, 0, `\`cortex ${args.join(' ')}\` exits cleanly with an empty vault`);
+  }
+});
