@@ -425,7 +425,7 @@ function applyGraph(g,keep){
   bySlug=new Map(nodes.map(n=>[n.id,n]));
   // "You have nothing" is a claim, and this is the one place cortex can honestly make it:
   // the graph came back, and it came back empty.
-  const be=document.getElementById("brainempty"); if(be) be.hidden = nodes.length > 0;
+  const be=document.getElementById("brainempty"); if(be) be.hidden = true;   // TEMP: the void returns
   edges=(g.edges||[]).filter(e=>bySlug.has(e.source)&&bySlug.has(e.target)).map(e=>({s:bySlug.get(e.source),t:bySlug.get(e.target)}));
   nbr=new Map();nodes.forEach(n=>nbr.set(n.id,new Set()));
   edges.forEach(e=>{nbr.get(e.s.id).add(e.t.id);nbr.get(e.t.id).add(e.s.id);});
