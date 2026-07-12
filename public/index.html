@@ -4,7 +4,7 @@
   :root {
     --bg:#06080f; --bg-2:#0b0e1c; --glow:#141b3e; --nebula:#1a1140;
     --panel:rgba(15,19,34,.74); --panel-solid:#0d111f; --card:#141a2c;
-    --line:#232b47; --line-2:#2e3860; --ink:#eaeffb; --ink-dim:#8e99b9; --ink-faint:#7580a3;
+    --line:#232b47; --line-2:#2e3860; --ink:#eaeffb; --ink-dim:#8e99b9; --ink-faint:#7580a3; --danger:#f0776a;
     --accent:#8ab4ff; --accent-2:#c4a5ff;
     --n-project:#2fe6a6; --n-concept:#7aa2ff; --n-source:#ffc24d; --n-entity:#cf9bff; --n-moc:#ff6b8b;
     --shadow:0 24px 70px -18px rgba(0,0,0,.85); --ctrl:rgba(20,26,44,.7);
@@ -13,7 +13,7 @@
     :root {
       --bg:#f4f7fe; --bg-2:#eaf0fb; --glow:#e2eafb; --nebula:#ece6fb;
       --panel:rgba(255,255,255,.8); --panel-solid:#fff; --card:#f4f7fe;
-      --line:#dde4f1; --line-2:#c8d2e6; --ink:#111830; --ink-dim:#57617d; --ink-faint:#66708c;
+      --line:#dde4f1; --line-2:#c8d2e6; --ink:#111830; --ink-dim:#57617d; --ink-faint:#66708c; --danger:#a3231a;
       --accent:#2f57cf; --accent-2:#7a45e0;
       --n-project:#06b981; --n-concept:#3b6bf0; --n-source:#d98a00; --n-entity:#8b46e6; --n-moc:#e0405f;
       --shadow:0 24px 60px -22px rgba(40,60,120,.3); --ctrl:rgba(255,255,255,.82);
@@ -131,7 +131,11 @@
   #cmpTags{margin-bottom: 8px;font-size:12px;}
   #cmpBody{min-height:190px;resize:vertical;line-height:1.6;font-size:12px;
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
-  .cmp-err{margin-top: 8px;font-size:12px;color:#f0776a;}
+  /* #f0776a is a fine red on the dark ground and 2.78:1 on the light one — so the message
+     saying "your note was not saved" was the one message you could not read. It survived
+     because an error is a state nothing ever rendered: no gate had ever made a write fail
+     and then LOOKED at what it said. Now one does. */
+  .cmp-err{margin-top: 8px;font-size:12px;color:var(--danger);}
   .cmp-err[hidden]{display:none;}
   .cmp-foot{display:flex;align-items:center;margin-top: 16px;}
   .cmp-hint{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--ink-faint);}
