@@ -318,9 +318,31 @@
 :root[data-theme="light"] .xtk{color:#2b3440;background:rgba(244,247,254,.93);border-color:#dde4f1;}
 :root[data-theme="light"] .xtk .xtk-l{color:#57617d;}
 @media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .xtk{color:#2b3440;background:rgba(244,247,254,.93);border-color:#dde4f1;}:root:not([data-theme="dark"]) .xtk .xtk-l{color:#57617d;}}
+  /* The empty brain, said out loud. Centred over the canvas, its own ground so it is
+     legible on either theme, and pointer-events:none so it never blocks the graph. */
+  .welcome{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;text-align:center;padding:24px;pointer-events:none;z-index:5;}
+  .welcome[hidden]{display:none;}
+  .welcome .big{font-size:44px;}
+  .welcome h2{margin:0;font-size:20px;color:var(--ink);}
+  .welcome p{margin:0;max-width:52ch;font-size:14px;color:var(--ink-dim);line-height:1.6;}
+  .welcome code{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--ink);}
 </style>
 
 <canvas id="c"></canvas>
+
+<!-- A BRAND-NEW SECOND BRAIN GREETED YOU WITH A BLACK VOID.
+     cortex had NO empty state at all — not a hidden one, none in the DOM. With an empty
+     vault it drew an empty canvas and said nothing, and the first-run CI gate went green
+     over it for cortex's whole life, because an empty page has nothing on it to be wrong.
+     Found the day the gate started DEMANDING an empty state instead of tolerating one. -->
+<div class="welcome" id="brainempty" hidden>
+  <div class="big">🧠</div>
+  <h2>Your second brain is empty</h2>
+  <p>Nothing has been captured yet. Write a note and it becomes a node here; link it with
+     <code>[[wikilinks]]</code> and the graph draws itself as the connections accumulate.</p>
+  <p class="cmp-hint"><code>cortex capture "…"</code> from the CLI, or <code>cortex_write</code> from an agent.</p>
+</div>
 
 <header id="bar">
   <div class="brand">
@@ -401,6 +423,9 @@ function applyGraph(g,keep){
       pinned:p?!!p.pinned:false,x:p?p.x:Math.cos(a)*r,y:p?p.y:Math.sin(a)*r,vx:0,vy:0,hi:p?p.hi:1,sc:p?p.sc:1};});
   if(!keep){const pins=loadPins();for(const n of nodes)if(pins[n.id]){n.x=pins[n.id][0];n.y=pins[n.id][1];n.pinned=true;}}
   bySlug=new Map(nodes.map(n=>[n.id,n]));
+  // "You have nothing" is a claim, and this is the one place cortex can honestly make it:
+  // the graph came back, and it came back empty.
+  const be=document.getElementById("brainempty"); if(be) be.hidden = nodes.length > 0;
   edges=(g.edges||[]).filter(e=>bySlug.has(e.source)&&bySlug.has(e.target)).map(e=>({s:bySlug.get(e.source),t:bySlug.get(e.target)}));
   nbr=new Map();nodes.forEach(n=>nbr.set(n.id,new Set()));
   edges.forEach(e=>{nbr.get(e.s.id).add(e.t.id);nbr.get(e.t.id).add(e.s.id);});
@@ -436,6 +461,7 @@ function applyGraph(g,keep){
 class ApiError extends Error {}
 
 function apiDown(msg) {
+  ASKED('error');   // a failure is not an answer of "nothing"
   let b = document.getElementById('apidown');
   if (!b) {
     b = document.createElement('div');
@@ -486,11 +512,39 @@ function apiDown(msg) {
 // So: while a request is in flight, say so. aria-busy for anything listening, and a
 // visible pill for the human — after a beat, so a fast answer never flickers.
 let inflight = 0, busyTimer = null;
+// ── AN EMPTY STATE IS A CLAIM. DO NOT MAKE IT UNTIL YOU HAVE BEEN TOLD. ───────────
+//
+// The pill above says "still asking" — but the welcome screen was STILL SITTING THERE
+// underneath it, saying "Pick a file from the tree" over a tree that had not loaded.
+// So the app contradicted itself: asking, and answering, at the same time.
+//
+// "You have nothing" and "I have not been told yet" are different statements, and only
+// one of them is true before the server answers. So while the first answer is
+// outstanding — and after one that FAILED — the empty state is withheld. Not deleted:
+// hidden, with the layout kept, so nothing jumps when the truth arrives.
+//
+// data-asked is set only once a request is actually in flight, so a page that never
+// fetches at all is untouched and shows its empty state exactly as before. (Hiding it
+// unconditionally would have hidden it FOREVER on any page with no API.)
+let everAnswered = false;
+const ASKED = (v) => document.documentElement.setAttribute('data-asked', v);
+
+(function withholdTheClaim() {
+  const st = document.createElement('style');
+  const hide = ['.empty', '.empty2', '.welcome', '.list-empty', '.detail-empty', '.flow-empty', '.act-empty']
+    .flatMap((c) => [`[data-asked="no"] ${c}`, `[data-asked="error"] ${c}`]).join(',');
+  st.textContent = `${hide}{visibility:hidden !important;}`;
+  (document.head || document.documentElement).appendChild(st);
+})();
 
 function busy(on) {
   inflight += on ? 1 : -1;
   if (inflight < 0) inflight = 0;
   document.body.setAttribute('aria-busy', inflight > 0 ? 'true' : 'false');
+  // Before the first answer lands, the app has not been told "nothing" — it has not been
+  // told anything — so it must not say "nothing".
+  if (inflight > 0 && !everAnswered) ASKED('no');
+  if (inflight === 0 && !on) { everAnswered = true; ASKED('yes'); }
   if (inflight > 0) {
     if (busyTimer) return;
     // 300ms: below this a human reads it as "instant", and a pill that flashes on every
