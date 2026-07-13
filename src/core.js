@@ -30,6 +30,10 @@ const localHM = () => { const d = new Date(); return `${pad2(d.getHours())}:${pa
 // sane bound. A raw bad value either THROWS at the SQLite `LIMIT ?` bind ("datatype mismatch"), makes
 // `LIMIT -1` return the WHOLE table, or makes `.slice(0, NaN)` return NOTHING — all silent-wrong answers.
 const posInt = (v, def, max = 1000) => (Number.isFinite(+v) && +v > 0 ? Math.min(Math.floor(+v), max) : def);
+// Match a tag inside the JSON tags array without letting a `%` or `_` IN THE TAG act as a LIKE
+// wildcard — otherwise tag 'a_b' matches 'axb' and '50%' matches '5000'. Escape the LIKE
+// metacharacters (and the escape char itself) and pair every use with `ESCAPE '\'`.
+const tagLike = (tag) => `%"${String(tag).replace(/[\\%_]/g, '\\$&')}"%`;
 const asArray = (v) => v == null ? [] : Array.isArray(v) ? v.map(String)
   : String(v).split(',').map((s) => s.trim()).filter(Boolean);
 const deslug = (s) => s.split('-').map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
@@ -276,7 +280,7 @@ export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
              WHERE notes_fts MATCH ?`;
   const args = [m];
   if (type) { sql += ' AND n.type=?'; args.push(type); }
-  if (tag) { sql += ' AND n.tags LIKE ?'; args.push(`%"${tag}"%`); }
+  if (tag) { sql += " AND n.tags LIKE ? ESCAPE '\\'"; args.push(tagLike(tag)); }
   sql += ' ORDER BY score LIMIT ?'; args.push(Math.max(k * 3, 20));
   let rows; try { rows = all(sql, ...args); } catch (e) { return { query, error: e.message, results: [] }; }
 
@@ -301,7 +305,7 @@ export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
     let csql = `SELECT COUNT(*) n FROM notes_fts JOIN notes n ON n.slug = notes_fts.slug WHERE notes_fts MATCH ?`;
     const cargs = [m];
     if (type) { csql += ' AND n.type=?'; cargs.push(type); }
-    if (tag) { csql += ' AND n.tags LIKE ?'; cargs.push(`%"${tag}"%`); }
+    if (tag) { csql += " AND n.tags LIKE ? ESCAPE '\\'"; cargs.push(tagLike(tag)); }
     matched = get(csql, ...cargs)?.n ?? results.length;
   } catch { /* keep the floor */ }
   const withheld = Math.max(0, matched - results.length);
@@ -338,7 +342,7 @@ export function related(query, { k = 8 } = {}) {
   for (const r of all(`SELECT DISTINCT b.src FROM links a JOIN links b ON a.dst=b.dst
                        WHERE a.src=? AND b.src<>? AND a.dst IS NOT NULL`, slug, slug)) bump(r.src, 1, 'co-cites');
   for (const t of JSON.parse(get('SELECT tags FROM notes WHERE slug=?', slug)?.tags || '[]'))
-    for (const r of all('SELECT slug FROM notes WHERE tags LIKE ?', `%"${t}"%`)) bump(r.slug, 1, `#${t}`);
+    for (const r of all("SELECT slug FROM notes WHERE tags LIKE ? ESCAPE '\\'", tagLike(t))) bump(r.slug, 1, `#${t}`);
   const ranked = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, k)
     .map(([s, pts]) => ({ slug: s, title: titleOf(s), score: pts, reasons: [...why.get(s)] }));
   return { slug, title: titleOf(slug), related: ranked };
@@ -465,7 +469,7 @@ export function tags() {
 }
 
 export function tagged(tag) {
-  const rows = all('SELECT slug,title,type FROM notes WHERE tags LIKE ? ORDER BY updated DESC', `%"${tag}"%`);
+  const rows = all("SELECT slug,title,type FROM notes WHERE tags LIKE ? ESCAPE '\\' ORDER BY updated DESC", tagLike(tag));
   return { tag, count: rows.length, notes: rows };
 }
 

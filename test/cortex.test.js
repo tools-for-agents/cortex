@@ -721,3 +721,20 @@ test('tagged(tag) lists notes for one tag exactly — a prefix is not a match', 
   const r = cx.tagged('proj');
   assert.equal(r.count, r.notes.length, 'count matches the list it returns');
 });
+
+test('a tag with a SQL LIKE metacharacter (_ or %) matches literally, not as a wildcard', () => {
+  // The tag match is a LIKE, so a `_` in the tag would match any char ('a_b' → 'axb') and a `%`
+  // would match any run ('50%' → '5000') unless the metacharacters are escaped.
+  const under = cx.write('Underscored', { type: 'concept', tags: ['a_b'], body: 'literal underscore tag' });
+  const axb = cx.write('Decoy', { type: 'concept', tags: ['axb'], body: 'the wildcard would wrongly catch me' });
+  const pct = cx.write('Percenty', { type: 'concept', tags: ['50%'], body: 'literal percent tag' });
+  const thousands = cx.write('Thousands', { type: 'concept', tags: ['5000'], body: 'the % wildcard would wrongly catch me' });
+
+  const u = cx.tagged('a_b').notes.map((n) => n.slug);
+  assert.ok(u.includes(under.slug) && !u.includes(axb.slug), "'a_b' matches only the literal a_b tag, not 'axb'");
+  const p = cx.tagged('50%').notes.map((n) => n.slug);
+  assert.ok(p.includes(pct.slug) && !p.includes(thousands.slug), "'50%' matches only the literal 50% tag, not '5000'");
+  // the search tag-filter shares the LIKE — same escaping
+  const sf = cx.search('tag', { tag: 'a_b' }).results.map((r) => r.slug);
+  assert.ok(!sf.includes(axb.slug), "search tag='a_b' does not wildcard-match 'axb' either");
+});
