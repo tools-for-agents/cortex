@@ -53,6 +53,12 @@ const CANARIES = [
     find: "    for (const a of JSON.parse(r.aliases || '[]')) add(slugify(a), r.slug);",
     into: '    void r;',
   },
+  {
+    why: 'inline frontmatter arrays need [ AND ] — `||` turns a scalar like "[unclosed" into a mangled one-item list',
+    file: 'src/notes.js',
+    find: "    if (val.startsWith('[') && val.endsWith(']'))",
+    into: "    if (val.startsWith('[') || val.endsWith(']'))",
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

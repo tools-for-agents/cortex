@@ -512,3 +512,57 @@ test('an alias is a name: it resolves, it links, and it is not a broken link', a
   assert.ok(cx.linksOf('Machine Learning', { direction: 'in' }).backlinks.some((b) => b.slug === 'aliasindex'),
     'the note knows it was linked to, even though it was linked to by another name');
 });
+
+// FRONTMATTER IS THE ENTRY POINT FOR EVERY NOTE'S METADATA — and it had zero direct coverage.
+//
+// parseFrontmatter/serializeFrontmatter are the primitives title, type, tags and aliases all flow
+// through. If the quoting breaks, a title with a colon silently reparses as a different title (or
+// as a key); if the array parsing breaks, tags vanish. None of it was tested — the notes never
+// carried a value tricky enough to expose it.
+import { parseFrontmatter, serializeFrontmatter } from '../src/notes.js';
+
+test('frontmatter round-trips tricky values without losing or corrupting them', () => {
+  // colons, brackets, hyphens, leading dash, empty — the values that break a naive YAML writer
+  const data = {
+    title: 'Note: the important one',        // a colon would be read as key:value on reparse
+    type: 'concept',
+    tags: ['a-b', 'has:colon', 'urgent'],    // a colon inside an inline array item
+    aliases: ['- dashy', '[bracket]'],       // leading indicator chars
+  };
+  const text = serializeFrontmatter(data) + '\n\nthe body\n';
+  const { data: back, body } = parseFrontmatter(text);
+
+  assert.equal(back.title, data.title, 'a colon in the title survives the round trip');
+  assert.deepEqual(back.tags, data.tags, 'every tag comes back, colon and all');
+  assert.deepEqual(back.aliases, data.aliases, 'and leading-indicator values are preserved');
+  assert.equal(back.type, 'concept');
+  // parseFrontmatter strips the single newline right after the closing fence; the blank-line
+  // separator write() puts between fence and body survives as leading whitespace, harmless and
+  // stable (sync reads the body once, never re-serialises, so it cannot accumulate). The invariant
+  // that matters is that the body CONTENT is intact and cleanly split from the frontmatter.
+  assert.equal(body.trim(), 'the body', 'the body content survives, separated from the frontmatter');
+  assert.ok(!body.includes('title:'), 'and no frontmatter leaked into the body');
+});
+
+test('frontmatter parses inline arrays, block lists, comments and blank lines', () => {
+  const inline = parseFrontmatter('---\ntitle: A\ntags: [x, y, z]\n---\nbody\n').data;
+  assert.deepEqual(inline.tags, ['x', 'y', 'z'], 'inline [a, b, c] becomes an array');
+
+  const block = parseFrontmatter('---\ntitle: B\ntags:\n  - one\n  - two\n---\nbody\n').data;
+  assert.deepEqual(block.tags, ['one', 'two'], 'a block list of "- item" lines becomes an array');
+
+  const noisy = parseFrontmatter('---\n# a comment\ntitle: C\n\ntype: note\n---\nbody\n').data;
+  assert.equal(noisy.title, 'C', 'a # comment line is ignored, not parsed as a key');
+  assert.equal(noisy.type, 'note', 'and a blank line does not break the fields after it');
+
+  // a scalar that merely LOOKS like an array (only one bracket) stays a scalar, not a mangled list
+  const notArray = parseFrontmatter('---\ntitle: [unclosed\n---\nbody\n').data;
+  assert.equal(notArray.title, '[unclosed', 'a lone [ is not an inline array');
+});
+
+test('a document with no frontmatter is all body, and a note without --- close is not half-parsed', () => {
+  assert.deepEqual(parseFrontmatter('just a body, no fence\n'), { data: {}, body: 'just a body, no fence\n' });
+  // an opening --- with no closing --- must not swallow the document as frontmatter
+  const unterminated = parseFrontmatter('---\ntitle: X\nstill going\n');
+  assert.deepEqual(unterminated.data, {}, 'no closing fence → treat the whole thing as body, parse nothing');
+});
