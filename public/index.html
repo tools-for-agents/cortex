@@ -476,6 +476,7 @@ class ApiError extends Error {}
 
 function apiDown(msg) {
   ASKED('error');   // a failure is not an answer of "nothing"
+  lastFailed = true;   // ...and busy(false) must not overwrite that when the request settles
   let b = document.getElementById('apidown');
   if (!b) {
     b = document.createElement('div');
@@ -502,8 +503,29 @@ function apiDown(msg) {
   // A fixed bar at top:0 sits ON TOP of the app's own header, so the first cut of this
   // reported the outage by hiding the title bar. That is not an improvement. box-sizing
   // is forced to border-box so the padding eats into a 100vh body instead of overflowing it.
+  const h = b.getBoundingClientRect().height;
   document.body.style.boxSizing = 'border-box';
-  document.body.style.paddingTop = b.getBoundingClientRect().height + 'px';
+  document.body.style.paddingTop = h + 'px';
+
+  // AND PADDING THE BODY DOES NOT MOVE A FIXED ELEMENT. cortex's own header is
+  // `position:fixed; top:0`, so it sat exactly where it always sat and the banner printed
+  // straight through the wordmark — the outage notice hiding the app it was reporting on,
+  // which is the very thing the padding above was written to prevent. It just could not
+  // reach the one kind of element that needed it.
+  //
+  // Nothing could see it, either: the banner and the header are BOTH fixed layers, and the
+  // overlap check excludes those on purpose (a sticky bar over scrolled content is what a
+  // sticky bar is for). iris's overlay-clip rule found it the day it was written.
+  //
+  // So push down whatever is pinned to the top of the viewport, not just the flow.
+  for (const el of document.body.querySelectorAll('*')) {
+    if (el === b) continue;
+    const s = getComputedStyle(el);
+    if (s.position !== 'fixed' || parseFloat(s.top) !== 0) continue;
+    if (el.dataset.apidownShifted) continue;
+    el.dataset.apidownShifted = '1';
+    el.style.top = h + 'px';
+  }
 }
 
 // Only OUR "the server said no" is swallowed. A real TypeError still reaches the console,
@@ -541,6 +563,13 @@ let inflight = 0, busyTimer = null;
 // fetches at all is untouched and shows its empty state exactly as before. (Hiding it
 // unconditionally would have hidden it FOREVER on any page with no API.)
 let everAnswered = false;
+// A REQUEST THAT FAILED IS NOT AN ANSWER — and busy(false) used to say it was.
+// apiDown() sets ASKED('error') so the empty state is withheld... and then the `finally`
+// block ran busy(false), which declared ASKED('yes') the moment the request SETTLED,
+// success or failure alike. The claim came straight back, milliseconds later.
+// So the page said "The server said no" and "you have nothing" AT THE SAME TIME: the
+// exact self-contradiction cycle 35 was written to end, undone by the very next line.
+let lastFailed = false;
 const ASKED = (v) => document.documentElement.setAttribute('data-asked', v);
 
 (function withholdTheClaim() {
@@ -558,7 +587,11 @@ function busy(on) {
   // Before the first answer lands, the app has not been told "nothing" — it has not been
   // told anything — so it must not say "nothing".
   if (inflight > 0 && !everAnswered) ASKED('no');
-  if (inflight === 0 && !on) { everAnswered = true; ASKED('yes'); }
+  if (on && inflight === 1) lastFailed = false;   // a fresh batch: nothing has failed yet
+  if (inflight === 0 && !on) {
+    if (lastFailed) ASKED('error');                // settled, but nobody answered
+    else { everAnswered = true; ASKED('yes'); }
+  }
   if (inflight > 0) {
     if (busyTimer) return;
     // 300ms: below this a human reads it as "instant", and a pill that flashes on every
