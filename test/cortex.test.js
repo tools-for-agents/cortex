@@ -612,3 +612,17 @@ test('parseTags finds #tags but not markdown headings or mid-word hashes', () =>
   assert.deepEqual(parseTags('#123 starts with a digit'), [],
     'a tag must start with a letter, so #123 is not one');
 });
+
+test('tagged(tag) lists notes for one tag exactly — a prefix is not a match', () => {
+  // Tags live as a JSON array string; tagged() matches on `"tag"` WITH the quotes, so a
+  // tag that is a prefix of another ('proj' vs 'project') does not bleed across.
+  const short = cx.write('Zephyrus', { type: 'concept', tags: ['proj'], body: 'Tagged proj.' });
+  const longer = cx.write('Zephyrine', { type: 'concept', tags: ['project'], body: 'Tagged project, not proj.' });
+
+  const slugs = cx.tagged('proj').notes.map((n) => n.slug);
+  assert.ok(slugs.includes(short.slug), 'the proj note is listed');
+  assert.equal(slugs.includes(longer.slug), false,
+    "the 'project' note is NOT a 'proj' note — the quoted LIKE stops the substring bleed");
+  const r = cx.tagged('proj');
+  assert.equal(r.count, r.notes.length, 'count matches the list it returns');
+});
