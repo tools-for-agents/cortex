@@ -233,7 +233,10 @@ export function read(query, { max_tokens } = {}) {
 
 // ── search (FTS5 + bm25, token-budgeted snippets — like lens, over your brain) ──
 function ftsQuery(q) {
-  const terms = String(q).match(/[A-Za-z0-9_]+/g) || [];
+  // \p{L}\p{N} (not [A-Za-z0-9]) so a query in any script — Turkish, Cyrillic, CJK —
+  // tokenizes the SAME way unicode61 indexed the notes; ASCII-only stripped every
+  // non-Latin term to nothing and searched for a ghost.
+  const terms = String(q).match(/[\p{L}\p{N}_]+/gu) || [];
   return terms.length ? terms.map((t) => `"${t}"`).join(' OR ') : null;
 }
 
@@ -323,7 +326,7 @@ export function suggest(query, { k = 8 } = {}) {
   const connected = new Set([slug]);
   for (const r of all('SELECT dst FROM links WHERE src=? AND dst IS NOT NULL', slug)) connected.add(r.dst);
   for (const r of all('SELECT src FROM links WHERE dst=?', slug)) connected.add(r.src);
-  const terms = [...new Set((`${n.title} ${n.body || ''}`.match(/[A-Za-z0-9_]{3,}/g) || []).map((t) => t.toLowerCase()))].slice(0, 40);
+  const terms = [...new Set((`${n.title} ${n.body || ''}`.match(/[\p{L}\p{N}_]{3,}/gu) || []).map((t) => t.toLowerCase()))].slice(0, 40);
   if (!terms.length) return { slug, title: n.title, suggestions: [] };
   const m = terms.map((t) => `"${t}"`).join(' OR ');
   const rows = all(`SELECT nn.slug, nn.title, nn.type, bm25(notes_fts) AS score

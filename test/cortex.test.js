@@ -33,6 +33,19 @@ test('search finds a note by its content', () => {
   assert.ok(cx.search('beta').results.some((x) => x.slug === 'alpha'));
 });
 
+test('search finds notes in any script — the index is unicode61, so the query must be too', () => {
+  // The notes are tokenized with unicode61 (indexes every script); a query tokenizer that
+  // only kept [A-Za-z0-9] threw away Turkish/Cyrillic/CJK terms and searched for a ghost.
+  const w = cx.write('Seyahat', { type: 'note',
+    body: 'İstanbul ve Ankara gezisi. Café résumé. Москва metro. 日本語 の ノート.' });
+  for (const q of ['İstanbul', 'Café', 'Москва', '日本語']) {
+    assert.ok(cx.search(q).results.some((x) => x.slug === w.slug),
+      `a ${q} query must find the note that contains it`);
+  }
+  // ASCII still works exactly as before (the fix is a strict superset)
+  assert.ok(cx.search('Ankara').results.some((x) => x.slug === w.slug), 'ASCII search is unchanged');
+});
+
 test('append merges body and unions tags', () => {
   const r = cx.write('Alpha', { append: true, tags: ['y'], body: 'More text.' });
   assert.equal(r.action, 'updated');
