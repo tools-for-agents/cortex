@@ -18,7 +18,14 @@ const dirForType = (t) => TYPE_DIR[t] || t;
 const typeFromDir = (rel) => { const d = rel.includes('/') ? rel.split('/')[0] : null; return d ? (REV[d] || d) : null; };
 
 const nowISO = () => new Date().toISOString();
-const today = () => new Date().toISOString().slice(0, 10);
+// A daily note is a LOCAL calendar-day idea: "what did I do today" means the user's today, in
+// their timezone. `toISOString()` is UTC, so for anyone east/west of UTC an entry written near
+// midnight landed on the WRONG DAY (and showed a UTC clock time). In Istanbul (UTC+3) a note at
+// 01:00 went to yesterday, stamped 22:00. The day and the entry stamp are therefore LOCAL.
+// (nowISO stays UTC — created/updated are timestamps, unambiguous only in UTC.)
+const pad2 = (n) => String(n).padStart(2, '0');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const localHM = () => { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
 const asArray = (v) => v == null ? [] : Array.isArray(v) ? v.map(String)
   : String(v).split(',').map((s) => s.trim()).filter(Boolean);
 const deslug = (s) => s.split('-').map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
@@ -504,7 +511,7 @@ export function graphData() {
 export function daily(text) {
   if (!text || !String(text).trim()) throw new Error('text is required');
   const d = today();
-  const stamp = new Date().toISOString().slice(11, 16);
+  const stamp = localHM();
   const line = `- ${stamp} — ${String(text).trim()}`;
   const slug = resolveSlug(d);
   const body = slug ? `${get('SELECT body FROM notes WHERE slug=?', slug)?.body ?? ''}\n${line}` : `# ${d}\n\n${line}`;

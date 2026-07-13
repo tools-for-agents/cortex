@@ -105,6 +105,31 @@ test('daily appends timestamped journal lines to one note per day', () => {
   assert.ok(body.includes('did a thing') && body.includes('did another'));
 });
 
+test('a daily note uses the LOCAL calendar day and clock, not UTC', () => {
+  // toISOString() is UTC, so an entry written near midnight landed on the WRONG day for anyone
+  // not on UTC — in Istanbul (UTC+3) a note at 01:00 went to yesterday, stamped 22:00. Pin LOCAL.
+  const prevTZ = process.env.TZ;
+  // Pick a zone whose local date is GUARANTEED to differ from UTC right now, so the test truly
+  // exercises the timezone-sensitive path (Etc/GMT+12 is UTC−12; Kiritimati is UTC+14).
+  process.env.TZ = new Date().getUTCHours() < 12 ? 'Etc/GMT+12' : 'Pacific/Kiritimati';
+  try {
+    const now = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    const localDay = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+    const utcDay = now.toISOString().slice(0, 10);
+    const localHour = p(now.getHours());
+    assert.notEqual(localDay, utcDay, 'sanity: the chosen TZ puts local and UTC on different days');
+
+    const r = cx.daily('a timezone-sensitive journal entry');
+    assert.equal(r.slug, localDay, 'the daily note is the LOCAL day…');
+    assert.notEqual(r.slug, utcDay, '…and specifically NOT the UTC day (the bug)');
+    assert.match(cx.read(localDay).body, new RegExp(`- ${localHour}:\\d{2} —`),
+      'the entry is stamped with the LOCAL clock hour, not the UTC one');
+  } finally {
+    if (prevTZ === undefined) delete process.env.TZ; else process.env.TZ = prevTZ;
+  }
+});
+
 test('sync rebuilds the index from files on disk', () => {
   const before = cx.stats().notes;
   const s = cx.sync();
@@ -284,7 +309,8 @@ test('journal: the day accumulates, and can be read back', async () => {
   try {
     assert.equal((await post('')).status, 400, 'an empty line is not an entry');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const n = new Date();  // the daily note is keyed by the LOCAL day, not UTC
+    const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
     const dayOf = async () => (await fetch(base + '/api/daily').then((r) => r.json()))
       .journal.find((d) => d.day === today);
     const before = (await dayOf())?.count ?? 0;      // an earlier test already journalled today
