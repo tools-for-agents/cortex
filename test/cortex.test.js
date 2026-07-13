@@ -411,3 +411,49 @@ test('a brand-new user, with no vault at all, can still run every read command',
     assert.equal(r.status, 0, `\`cortex ${args.join(' ')}\` exits cleanly with an empty vault`);
   }
 });
+
+// ── TWO NOTES CAN SHARE A FILENAME ────────────────────────────────────────────
+// Obsidian allows it. The slug was the bare filename AND the primary key, so the second
+// note silently OVERWROTE the first: `sync` said "total: 1" and said nothing else. Which
+// note survived was decided by the alphabetical order of the folder it happened to sit in —
+// renaming archive/ to zarchive/ swapped a live plan for a dead one from 2019.
+// That is data loss, out of the tool whose entire purpose is to remember.
+test('two notes with the same filename in different folders BOTH survive', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  mkdirSync(join(vault, 'projects'), { recursive: true });
+  mkdirSync(join(vault, 'archive'), { recursive: true });
+  writeFileSync(join(vault, 'projects', 'roadmap.md'), '---\ntitle: Roadmap (ACTIVE)\n---\nShip payments in Q3.\n');
+  writeFileSync(join(vault, 'archive', 'roadmap.md'), '---\ntitle: Roadmap (2019, dead)\n---\nMigrate to Perl.\n');
+  cx.sync();
+
+  assert.equal(cx.search('Perl').count, 1, 'the archived note survived');
+  assert.equal(cx.search('payments').count, 1, 'the live note survived');
+  assert.equal(cx.read('projects/roadmap').title, 'Roadmap (ACTIVE)', 'addressable by path');
+  assert.equal(cx.read('archive/roadmap').title, 'Roadmap (2019, dead)', 'both of them are');
+
+  // The short slug belongs to NOBODY when it is ambiguous — whoever held it would be the
+  // arbitrary winner, and an arbitrary winner is exactly the bug.
+  assert.throws(() => cx.read('roadmap'), /ambiguous/,
+    'asking by the ambiguous name must not silently hand back one of the two');
+  assert.throws(() => cx.read('roadmap'), /archive\/roadmap/, 'and it must name the candidates');
+});
+
+// An unresolved [[link]] to a name that means TWO notes is not broken — it is AMBIGUOUS.
+// Telling someone the link is broken sends them to write a note that already exists. Twice.
+test('an ambiguous [[link]] is reported as ambiguous, never as broken', async () => {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(join(vault, 'ambindex.md'), '---\ntitle: Amb Index\n---\nSee [[roadmap]] and [[nowhere-at-all]].\n');
+  cx.sync();
+  const l = cx.lint();
+  assert.equal(l.ambiguous_count, 1, '[[roadmap]] means two notes');
+  assert.deepEqual(l.ambiguous[0].means.sort(), ['archive/roadmap', 'projects/roadmap']);
+  assert.ok(l.broken.some((b) => b.target === 'nowhere-at-all'), 'a real dead link is still broken');
+  assert.ok(!l.broken.some((b) => b.target === 'roadmap'), 'an ambiguous link is NOT a broken one');
+});
+
+// The fix must not churn an ORDINARY vault: a filename that is unique keeps its short slug.
+// (Every note written by every test above is uniquely named — they all still answer to it.)
+test('a filename that is unique in the vault keeps its short slug', () => {
+  assert.equal(cx.read('Alpha').slug, 'alpha');
+  assert.equal(cx.read('Beta').slug, 'beta');
+});

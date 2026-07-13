@@ -37,11 +37,50 @@ function* walk(dir) {
   }
 }
 
+// ── a note's identity ──────────────────────────────────────────────────────────
+//
+// The slug WAS the bare filename. Obsidian lets two notes share a filename in
+// different folders (projects/roadmap.md, archive/roadmap.md) — and slug is the primary
+// key, so the second note silently OVERWROTE the first. One of your notes just stopped
+// existing, and `sync` reported "total: 1" without a word.
+//
+// Worse, WHICH note survived was decided by the alphabetical order of the folder it
+// happened to sit in: renaming archive/ to zarchive/ — changing nothing else — swapped
+// the live plan for a dead one from 2019.
+//
+// The vault-relative PATH is the only thing a filesystem guarantees is unique. So:
+// a basename that is unique in the vault keeps its short slug (an ordinary vault is
+// untouched, and no existing slug churns); a basename that is NOT unique gives the short
+// slug to NOBODY — every colliding note is keyed by its path. No winner, no loser, and
+// no dependence on the order the directory happened to be read in.
+const baseOf = (rel) => basename(rel).replace(/\.md$/, '');
+const pathSlug = (rel) => rel.replace(/\.md$/, '');
+
+function slugMap(rels) {
+  const byBase = new Map();
+  for (const rel of rels) {
+    const b = baseOf(rel);
+    if (!byBase.has(b)) byBase.set(b, []);
+    byBase.get(b).push(rel);
+  }
+  const m = new Map();
+  for (const [b, list] of byBase)
+    for (const rel of list) m.set(rel, list.length === 1 ? b : pathSlug(rel));
+  return m;
+}
+
+// The slug for ONE file, judged against what is already indexed. Used by write(),
+// which adds a file without walking the vault.
+function slugForPath(rel) {
+  const b = baseOf(rel);
+  const clash = all('SELECT path FROM notes WHERE path <> ?', rel).some((r) => baseOf(r.path) === b);
+  return clash ? pathSlug(rel) : b;
+}
+
 // ── index a single note (upsert row + FTS) from its file text ──────────────────
-function putNote(rel, text, mtime) {
+function putNote(rel, text, mtime, slug = slugForPath(rel)) {
   const { data, body } = parseFrontmatter(text);
-  const slug = basename(rel).replace(/\.md$/, '');
-  const title = data.title || deslug(slug);
+  const title = data.title || deslug(baseOf(rel));
   const type = data.type || typeFromDir(rel) || 'note';
   const tags = [...new Set([...asArray(data.tags), ...parseTags(body)])];
   const aliases = asArray(data.aliases);
@@ -67,28 +106,61 @@ function deleteNote(slug) {
 // ── (re)build the whole link graph from indexed note bodies ────────────────────
 // Resolve every [[target]] to a slug via slug / title / alias. Cheap at personal
 // scale and always consistent — new notes fix previously-broken links for free.
-function rebuildLinks() {
-  const map = new Map();
-  for (const r of all('SELECT slug, title, aliases FROM notes')) {
-    map.set(r.slug, r.slug);
-    map.set(slugify(r.title || r.slug), r.slug);
-    for (const a of JSON.parse(r.aliases || '[]')) map.set(slugify(a), r.slug);
+//
+// A name that means two notes resolves to NEITHER. `map` used to be key→slug, so two
+// notes answering to one name meant the last one written won — [[roadmap]] pointed at
+// whichever note happened to be indexed second, and nothing said so. Key→SET, and a link
+// only resolves when the set holds exactly one note. An ambiguous [[link]] is left
+// unresolved on purpose, and `lint` tells the difference (see linkCandidates).
+function nameIndex() {
+  const m = new Map();
+  const add = (k, slug) => { if (!k) return; if (!m.has(k)) m.set(k, new Set()); m.get(k).add(slug); };
+  for (const r of all('SELECT slug, title, path, aliases FROM notes')) {
+    add(r.slug, r.slug);
+    add(slugify(r.slug), r.slug);            // [[projects/roadmap]] slugifies to projects-roadmap
+    add(slugify(baseOf(r.path)), r.slug);    // the SHORT name — ambiguous exactly when it should be
+    add(slugify(r.title || r.slug), r.slug);
+    for (const a of JSON.parse(r.aliases || '[]')) add(slugify(a), r.slug);
   }
+  return m;
+}
+
+// who could [[target]] mean? 0 = broken. 1 = resolved. 2+ = ambiguous, and NOT broken:
+// telling someone a link is broken when the note exists TWICE sends them to write a third.
+function rebuildLinks() {
+  const map = nameIndex();
   run('DELETE FROM links');
   const ins = writeDb().prepare('INSERT OR IGNORE INTO links (src,target,dst) VALUES (?,?,?)');
   for (const r of all('SELECT slug, body FROM notes'))
-    for (const target of parseLinks(r.body || ''))
-      ins.run(r.slug, target, map.get(slugify(target)) || null);
+    for (const target of parseLinks(r.body || '')) {
+      const hits = map.get(slugify(target));
+      ins.run(r.slug, target, hits?.size === 1 ? [...hits][0] : null);
+    }
 }
 
 // ── resolve a free-text reference to a single note slug ────────────────────────
+// AN AMBIGUOUS NAME IS NOT A MISSING NOTE — IT IS TWO NOTES.
+// "roadmap" when the vault holds projects/roadmap.md and archive/roadmap.md is not a
+// question with no answer; it is a question with two, and picking one silently is how a
+// tool hands back the wrong note wearing the right name. Say so, and name them both —
+// the fix belongs in the sentence.
+function ambiguous(q, rows) {
+  throw new Error(`"${q}" is ambiguous — ${rows.length} notes share that name: ` +
+    `${rows.map((r) => r.slug).join(' · ')}. Ask for one of those.`);
+}
+
 function resolveSlug(q) {
   if (!q) return null;
   const s = slugify(q);
   const bySlug = get('SELECT slug FROM notes WHERE slug=? OR slug=?', String(q), s);
   if (bySlug) return bySlug.slug;
-  const byTitle = get('SELECT slug FROM notes WHERE lower(title)=lower(?)', String(q));
-  if (byTitle) return byTitle.slug;
+  // the short name of a note that had to be keyed by path
+  const byBase = all('SELECT slug, path FROM notes').filter((r) => baseOf(r.path) === String(q) || baseOf(r.path) === s);
+  if (byBase.length > 1) ambiguous(q, byBase);
+  if (byBase.length === 1) return byBase[0].slug;
+  const byTitle = all('SELECT slug FROM notes WHERE lower(title)=lower(?)', String(q));
+  if (byTitle.length > 1) ambiguous(q, byTitle);   // two notes CAN carry one title
+  if (byTitle.length === 1) return byTitle[0].slug;
   for (const r of all('SELECT slug, aliases FROM notes'))
     if (JSON.parse(r.aliases || '[]').some((a) => slugify(a) === s)) return r.slug;
   return null;
@@ -126,9 +198,13 @@ export function write(title, { body = '', type, tags, aliases, append = false } 
   const text = `${serializeFrontmatter(fm)}\n\n${newBody.trim()}\n`;
   mkdirSync(dirname(abs), { recursive: true });
   writeFileSync(abs, text);
-  putNote(rel, text, Math.floor(statSync(abs).mtimeMs));
-  rebuildLinks();
-  return { slug, path: rel, title: String(title), type: finalType,
+  const actual = slugForPath(rel);
+  putNote(rel, text, Math.floor(statSync(abs).mtimeMs), actual);
+  // Writing a file whose NAME IS ALREADY TAKEN makes the other note ambiguous too — and it
+  // is still holding the short slug. Re-key the vault so both stay reachable, and report the
+  // slug this note actually got, not the one we hoped for.
+  if (actual !== slug) sync(); else rebuildLinks();
+  return { slug: actual, path: rel, title: String(title), type: finalType,
     action: existing ? 'updated' : 'created', links: parseLinks(newBody).length };
 }
 
@@ -318,14 +394,26 @@ export function lint({ stub_chars = 120, stale_days = 0 } = {}) {
   const orphans = all(`SELECT slug,title FROM notes
     WHERE slug NOT IN (SELECT src FROM links) AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)
     ORDER BY updated DESC`);
-  const broken = all('SELECT src,target FROM links WHERE dst IS NULL ORDER BY target').map((r) => ({ from: titleOf(r.src), target: r.target }));
+  // An unresolved link is not automatically a BROKEN one. If two notes answer to the name,
+  // the target does not fail to exist — it exists twice. Calling that "broken" tells you to
+  // go and write the note, and the note is already there. Twice.
+  const idx = nameIndex();
+  const unresolved = all('SELECT src,target FROM links WHERE dst IS NULL ORDER BY target');
+  const broken = [], ambiguous_links = [];
+  for (const r of unresolved) {
+    const hits = [...(idx.get(slugify(r.target)) ?? [])];
+    if (hits.length > 1) ambiguous_links.push({ from: titleOf(r.src), target: r.target, means: hits });
+    else broken.push({ from: titleOf(r.src), target: r.target });
+  }
   const untagged = all(`SELECT slug,title FROM notes WHERE tags='[]' OR tags IS NULL ORDER BY updated DESC`);
   const stubs = all('SELECT slug,title,LENGTH(body) AS len FROM notes WHERE LENGTH(body) < ? ORDER BY len', stub_chars)
     .map((r) => ({ slug: r.slug, title: r.title, chars: r.len }));
   const report = {
     orphan_count: orphans.length, broken_count: broken.length,
+    ambiguous_count: ambiguous_links.length,
     untagged_count: untagged.length, stub_count: stubs.length,
     orphans: orphans.slice(0, 30), broken: broken.slice(0, 30),
+    ambiguous: ambiguous_links.slice(0, 30),
     untagged: untagged.slice(0, 30), stubs: stubs.slice(0, 30),
   };
   if (stale_days > 0) {
@@ -427,14 +515,19 @@ export function sync({ reindex = false } = {}) {
   mkdirSync(VAULT, { recursive: true });
   const seen = new Set();
   let indexed = 0, skipped = 0;
-  for (const abs of walk(VAULT)) {
-    const rel = relative(VAULT, abs);
-    const slug = basename(rel).replace(/\.md$/, '');
+  // Two passes: the slug of a note depends on whether ANOTHER note shares its filename,
+  // so the whole vault has to be on the table before any of it can be keyed.
+  const rels = [...walk(VAULT)].map((abs) => relative(VAULT, abs));
+  const slugs = slugMap(rels);
+  for (const rel of rels) {
+    const slug = slugs.get(rel);
     seen.add(slug);
-    const mt = Math.floor(statSync(abs).mtimeMs);
-    const prev = get('SELECT mtime FROM notes WHERE slug=?', slug);
-    if (!reindex && prev && prev.mtime === mt) { skipped++; continue; }
-    putNote(rel, readFileSync(abs, 'utf8'), mt);
+    const mt = Math.floor(statSync(join(VAULT, rel)).mtimeMs);
+    const prev = get('SELECT mtime, path FROM notes WHERE slug=?', slug);
+    // `prev.path === rel` matters: without it, a note is "unchanged" because a DIFFERENT
+    // file holding its slug has the same mtime — which is how one silently ate the other.
+    if (!reindex && prev && prev.mtime === mt && prev.path === rel) { skipped++; continue; }
+    putNote(rel, readFileSync(join(VAULT, rel), 'utf8'), mt, slug);
     indexed++;
   }
   let removed = 0;
