@@ -457,3 +457,26 @@ test('a filename that is unique in the vault keeps its short slug', () => {
   assert.equal(cx.read('Alpha').slug, 'alpha');
   assert.equal(cx.read('Beta').slug, 'beta');
 });
+
+// A REAL OBSIDIAN VAULT IS NOT ALL MARKDOWN. It has an attachments folder full of images, it
+// has PDFs, it has .canvas files. The walk yields `.md` and nothing else — and NOTHING WAS
+// GUARDING THAT. A canary mutant deleted the extension check outright and the whole suite
+// stayed green, because every fixture in it happens to be markdown.
+//
+// Without the check, cortex indexes a PNG: binary bytes into the FTS index, into search
+// results, and through MCP into a model's context window.
+test('a vault with attachments in it: cortex indexes the notes and NOT the binaries', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  mkdirSync(join(vault, 'attachments'), { recursive: true });
+  writeFileSync(join(vault, 'attachments', 'diagram.png'),
+    Buffer.from('89504e470d0a1a0a0000000d49484452ZZATTACHMENTBYTES', 'binary'));
+  writeFileSync(join(vault, 'attachments', 'paper.pdf'), '%PDF-1.4 ZZATTACHMENTBYTES trailer');
+  writeFileSync(join(vault, 'board.canvas'), '{"nodes":[{"text":"ZZATTACHMENTBYTES"}]}');
+  writeFileSync(join(vault, 'realnote.md'), '---\ntitle: Real Note\n---\nZZREALNOTE lives here.\n');
+  cx.sync();
+
+  assert.equal(cx.search('ZZREALNOTE').count, 1, 'the markdown note is indexed');
+  assert.equal(cx.search('ZZATTACHMENTBYTES').count, 0,
+    'a png, a pdf and a canvas file are not notes — none of them may reach the index');
+  assert.throws(() => cx.read('diagram.png'), /no note|ambiguous/, 'and none of them is a readable note');
+});

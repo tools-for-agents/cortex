@@ -38,6 +38,25 @@ jobs:
   # the page 250px sideways, and controls at 2.4:1, past a green `node --test` — a
   # test suite does not look at the page. iris does: phone, tablet and desktop, in
   # both themes, and it fails here rather than in front of someone.
+  # CAN THE TEST SUITE STILL FAIL?
+  #
+  # Every other gate asks "is the code right". This one asks the question underneath it:
+  # IS ANYTHING STILL WATCHING. A suite that has quietly stopped covering a property goes
+  # green for exactly the same reason as one that is passing honestly.
+  #
+  # It earned its keep on its FIRST RUN here too: the `.md` filter in the vault walk could
+  # be deleted outright and the whole suite stayed green — because every fixture in it
+  # happens to be markdown. A real Obsidian vault is full of PNGs, PDFs and .canvas files.
+  mutants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: break it on purpose — every canary must die
+        run: node scripts/mutants.mjs
+
   look:
     runs-on: ubuntu-latest
     steps:
