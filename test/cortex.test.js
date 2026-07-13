@@ -519,7 +519,7 @@ test('an alias is a name: it resolves, it links, and it is not a broken link', a
 // through. If the quoting breaks, a title with a colon silently reparses as a different title (or
 // as a key); if the array parsing breaks, tags vanish. None of it was tested — the notes never
 // carried a value tricky enough to expose it.
-import { parseFrontmatter, serializeFrontmatter } from '../src/notes.js';
+import { parseFrontmatter, serializeFrontmatter, parseLinks, parseTags } from '../src/notes.js';
 
 test('frontmatter round-trips tricky values without losing or corrupting them', () => {
   // colons, brackets, hyphens, leading dash, empty — the values that break a naive YAML writer
@@ -565,4 +565,26 @@ test('a document with no frontmatter is all body, and a note without --- close i
   // an opening --- with no closing --- must not swallow the document as frontmatter
   const unterminated = parseFrontmatter('---\ntitle: X\nstill going\n');
   assert.deepEqual(unterminated.data, {}, 'no closing fence → treat the whole thing as body, parse nothing');
+});
+
+// parseLinks BUILDS THE GRAPH — every edge in cortex's knowledge graph is a [[wikilink]] it found.
+// It was tested only through write(); its edge-stripping was never pinned directly.
+test('parseLinks extracts wikilink targets, stripping alias and anchor, deduped', () => {
+  const links = parseLinks('see [[Machine Learning]], [[ML|the short name]], [[Notes#a-heading]], and [[Machine Learning]] again');
+  assert.deepEqual(links, ['Machine Learning', 'ML', 'Notes'],
+    'the target is what counts: [[a|display]] → a, [[a#anchor]] → a, and a repeat is not a second edge');
+  assert.deepEqual(parseLinks('no links here at all'), [], 'a note with no links has no edges');
+  assert.deepEqual(parseLinks('[[]] and [[ | x]]'), [], 'an empty or whitespace-only target is not a link');
+});
+
+// parseTags MUST tell a #tag from a markdown # heading — the difference is a space after the #.
+// If it caught headings, every note with a "# Title" would sprout a spurious tag.
+test('parseTags finds #tags but not markdown headings or mid-word hashes', () => {
+  const tags = parseTags('# A Real Heading\nthis is #Urgent and #project/alpha work (#boundary)');
+  assert.deepEqual(tags.sort(), ['boundary', 'project/alpha', 'urgent'],
+    'a # with a space is a heading (ignored); #tag, nested #a/b, and #tag after ( are all tags; and it lowercases');
+  assert.deepEqual(parseTags('a file.c#L3 reference and mid#word'), [],
+    'a # in the middle of a word is not a tag — it needs a boundary before it');
+  assert.deepEqual(parseTags('#123 starts with a digit'), [],
+    'a tag must start with a letter, so #123 is not one');
 });
