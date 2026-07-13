@@ -130,6 +130,19 @@ test('a daily note uses the LOCAL calendar day and clock, not UTC', () => {
   }
 });
 
+test('a bad count falls back to the default — it never throws or dumps the whole vault', () => {
+  // A raw bad k threw at the SQLite `LIMIT ?` bind ("datatype mismatch"), or `LIMIT -1` returned
+  // EVERY note, or `slice(0, NaN)` returned nothing — all silent-wrong. Now they coerce to a default.
+  for (let i = 0; i < 25; i++) cx.write(`Fodder ${i}`, { type: 'note', body: `filler ${i}` });
+  assert.equal(cx.recent().notes.length, 15, 'baseline recent returns the default 15');
+  for (const bad of [NaN, -1, 0, 'abc', Infinity]) {
+    assert.equal(cx.recent({ k: bad }).notes.length, 15,
+      `recent k=${String(bad)} falls back to 15 — not a throw, not the whole vault`);
+  }
+  assert.doesNotThrow(() => cx.related('Fodder 0', { k: NaN }), 'related survives a NaN k');
+  assert.doesNotThrow(() => cx.suggest('Fodder 0', { k: Infinity }), 'suggest survives an Infinity k');
+});
+
 test('sync rebuilds the index from files on disk', () => {
   const before = cx.stats().notes;
   const s = cx.sync();

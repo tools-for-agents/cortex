@@ -26,6 +26,10 @@ const nowISO = () => new Date().toISOString();
 const pad2 = (n) => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
 const localHM = () => { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+// Coerce a count/limit that arrived as NaN ('?k=abc'), a string, 0, negative, or Infinity back to a
+// sane bound. A raw bad value either THROWS at the SQLite `LIMIT ?` bind ("datatype mismatch"), makes
+// `LIMIT -1` return the WHOLE table, or makes `.slice(0, NaN)` return NOTHING — all silent-wrong answers.
+const posInt = (v, def, max = 1000) => (Number.isFinite(+v) && +v > 0 ? Math.min(Math.floor(+v), max) : def);
 const asArray = (v) => v == null ? [] : Array.isArray(v) ? v.map(String)
   : String(v).split(',').map((s) => s.trim()).filter(Boolean);
 const deslug = (s) => s.split('-').map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
@@ -320,6 +324,7 @@ export function linksOf(query, { direction = 'both' } = {}) {
 
 // ── related: rank the neighbourhood by links, co-citation and shared tags ──────
 export function related(query, { k = 8 } = {}) {
+  k = posInt(k, 8, 100);
   const slug = requireSlug(query);
   const score = new Map(); const why = new Map();
   const bump = (s, pts, reason) => {
@@ -343,6 +348,7 @@ export function related(query, { k = 8 } = {}) {
 // The auto-librarian move — turn orphans into connected notes. Seeds an FTS query
 // from the note's own text and drops anything it's already connected to.
 export function suggest(query, { k = 8 } = {}) {
+  k = posInt(k, 8, 100);
   const slug = requireSlug(query);
   const n = get('SELECT title, body FROM notes WHERE slug=?', slug);
   const connected = new Set([slug]);
@@ -484,6 +490,7 @@ export function graph() {
 }
 
 export function recent({ k = 15 } = {}) {
+  k = posInt(k, 15, 500);
   return { notes: all('SELECT slug,title,type,updated FROM notes ORDER BY updated DESC LIMIT ?', k) };
 }
 
