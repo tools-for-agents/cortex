@@ -270,17 +270,32 @@ export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
   let rows; try { rows = all(sql, ...args); } catch (e) { return { query, error: e.message, results: [] }; }
 
   const results = [];
-  let tokens = 0;
+  let tokens = 0, squeezed = 0;
   for (const r of rows) {
     if (results.length >= k) break;
     const excerpt = (r.snip || '').replace(/\s+/g, ' ').trim();
     const tk = estTokens(excerpt);
-    if (tokens + tk > max_tokens && results.length > 0) continue;
+    if (tokens + tk > max_tokens && results.length > 0) { squeezed++; continue; }
     results.push({ slug: r.slug, title: r.title, type: r.type, tags: JSON.parse(r.tags || '[]'),
       score: Math.round(r.score * 1000) / 1000, tokens: tk, excerpt });
     tokens += tk;
   }
-  return { query, searched, count: results.length, tokens, results };
+
+  // How many notes actually matched — not how many survived the budget/k. Without this a
+  // caller cannot tell "6 notes exist" from "6 of 40 fit the budget", and a budget that hides
+  // results while claiming to be complete is worse than no budget (same contract as lens).
+  // Counted over the same MATCH (+ type/tag filters), so it is the whole truth.
+  let matched = results.length;
+  try {
+    let csql = `SELECT COUNT(*) n FROM notes_fts JOIN notes n ON n.slug = notes_fts.slug WHERE notes_fts MATCH ?`;
+    const cargs = [m];
+    if (type) { csql += ' AND n.type=?'; cargs.push(type); }
+    if (tag) { csql += ' AND n.tags LIKE ?'; cargs.push(`%"${tag}"%`); }
+    matched = get(csql, ...cargs)?.n ?? results.length;
+  } catch { /* keep the floor */ }
+  const withheld = Math.max(0, matched - results.length);
+  const limited_by = withheld === 0 ? null : squeezed > 0 ? 'budget' : 'k';
+  return { query, searched, count: results.length, tokens, results, matched, withheld, limited_by, budget: max_tokens, k };
 }
 
 // ── links: backlinks (in), forward links (out), or both ───────────────────────

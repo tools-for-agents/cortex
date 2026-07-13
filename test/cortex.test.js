@@ -46,6 +46,24 @@ test('search finds notes in any script — the index is unicode61, so the query 
   assert.ok(cx.search('Ankara').results.some((x) => x.slug === w.slug), 'ASCII search is unchanged');
 });
 
+test('search owns up to what the budget/k hid — it never looks complete when it is not', () => {
+  // A budget that hides results while reporting itself complete is worse than no budget.
+  for (let i = 0; i < 12; i++) cx.write(`Budget note ${i}`, { type: 'note', body: `A note about the zzbudgettopic subject, number ${i}.` });
+
+  const capped = cx.search('zzbudgettopic', { k: 3 });
+  assert.equal(capped.count, 3, 'only k results come back');
+  assert.ok(capped.matched >= 12, 'but it reports how many actually matched');
+  assert.equal(capped.withheld, capped.matched - capped.count, 'withheld = matched − returned');
+  assert.equal(capped.limited_by, 'k', 'and it names the ceiling that bound: k');
+
+  const squeezed = cx.search('zzbudgettopic', { k: 20, max_tokens: 20 });
+  assert.ok(squeezed.withheld > 0 && squeezed.limited_by === 'budget', 'a tiny budget names the budget as the ceiling');
+
+  const roomy = cx.search('zzbudgettopic', { k: 50 });
+  assert.equal(roomy.withheld, 0, 'when nothing is hidden, nothing is withheld');
+  assert.equal(roomy.limited_by, null, 'and it does not cry wolf — limited_by is null');
+});
+
 test('append merges body and unions tags', () => {
   const r = cx.write('Alpha', { append: true, tags: ['y'], body: 'More text.' });
   assert.equal(r.action, 'updated');
