@@ -2,7 +2,9 @@
 // interlinked. Gives an agent a brain pre-loaded with how its own tools work —
 // and makes `cortex serve` show a real connected graph out of the box.
 //   CORTEX_VAULT=./cortex/vault node cortex/scripts/seed.js
-import { write, graphData, VAULT } from '../src/core.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { write, graphData, sync, VAULT } from '../src/core.js';
 
 const notes = [
   ['Tools for Agents', 'moc', ['toolkit'],
@@ -51,6 +53,25 @@ notes.push(
 );
 
 for (const [title, type, tags, body] of notes) { write(title, { type, tags, body }); n++; }
+
+// ── the ugliest row of all: A FILENAME THAT EXISTS TWICE ──────────────────────
+// An Obsidian vault routinely holds projects/roadmap.md AND archive/roadmap.md. Those two
+// notes used to collide on the primary key and one of them silently ceased to exist. They
+// are keyed by path now — which means a slug can contain a slash, and NOTHING had ever
+// rendered one: `write()` cannot produce a duplicate filename, so the seed could not either,
+// so the graph view had never drawn a note whose slug is `archive/roadmap`.
+// A gate that only ever sees tidy data is shaped to pass. Write the files directly.
+mkdirSync(join(VAULT, 'archive'), { recursive: true });
+writeFileSync(join(VAULT, 'archive', 'roadmap.md'),
+  '---\ntitle: Roadmap (2019, archived)\ntype: project\ntags: [toolkit]\n---\n' +
+  'The abandoned plan. Shares a filename with the live one in projects/ — see [[Tools for Agents]].\n');
+mkdirSync(join(VAULT, 'projects'), { recursive: true });
+writeFileSync(join(VAULT, 'projects', 'roadmap.md'),
+  '---\ntitle: Roadmap (live)\ntype: project\ntags: [toolkit]\n---\n' +
+  'The current plan. Same filename, different folder — both must exist. See [[Tools for Agents]].\n');
+n += 2;
+sync();
+
 const g = graphData();
 console.log(`seeded ${n} notes → ${g.stats.notes} nodes, ${g.stats.links} links in ${VAULT}`);
 console.log('run:  node cortex/src/cli.js serve   → http://localhost:7800');

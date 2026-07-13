@@ -100,9 +100,19 @@
   #legend .g.ghost{box-shadow:none;border:1.5px dashed var(--ink-faint);}
   #legend .n{margin-left: auto;font-size:12px;color:var(--ink-faint);font-variant-numeric:tabular-nums;}
 
-  #hint{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);z-index:14;font-size:12px;color:var(--ink-faint);
+  /* 30px put it INSIDE the cross-tool strip, which is fixed to the bottom and 37px tall:
+     the bottom half of every word was printed over, on a page that cannot scroll, so it
+     could never be moved out from under it. Clear the strip. */
+  #hint{position:fixed;left:50%;bottom:56px;transform:translateX(-50%);z-index:14;font-size:12px;color:var(--ink-faint);
     letter-spacing:.03em;white-space:nowrap;transition:opacity .5s;pointer-events:none;}
   #hint.gone{opacity:0;}
+  /* The hint says "hover to trace · drag to pin" — affordances that DO NOT EXIST on touch.
+     It is 462px wide and centred; the legend is 292px and pinned bottom-left. Below about
+     1120px the two meet, and the hint was printed straight through the legend panel at
+     tablet width — on a page that cannot scroll, so it could never be moved out from under
+     it. It was doing that at bottom:30px too; nothing had ever looked. Show it only where
+     there is room for it, which is the same place a mouse exists. */
+  @media (max-width:1120px){#hint{display:none;}}
 
   /* ── note panel ── */
   #panel{position:fixed;top:0;right:0;bottom:0;z-index:30;width:min(452px,93vw);background:var(--panel-solid);
