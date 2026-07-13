@@ -73,11 +73,15 @@ export function parseLinks(body) {
 }
 
 // Extract #tags from body (not markdown headings — those need a space after #).
+// \p{L}/\p{N} (not [A-Za-z]/\w) so a Turkish, Cyrillic or CJK tag — #İstanbul, #şehir —
+// is kept whole; the ASCII-only class dropped #İstanbul entirely and truncated #Café to "caf".
 export function parseTags(body) {
   const out = new Set();
-  const re = /(?:^|[\s(])#([A-Za-z][\w/-]*)/g;
+  const re = /(?:^|[\s(])#(\p{L}[\p{L}\p{N}_/-]*)/gu;
   let m;
-  while ((m = re.exec(body))) out.add(m[1].toLowerCase());
+  // JS lowercases the Turkish dotted capital İ to "i" + U+0307 (combining dot above),
+  // a redundant mark that would make #İstanbul a tag with an invisible character. Drop it.
+  while ((m = re.exec(body))) out.add(m[1].toLowerCase().replace(/̇/g, ''));
   return [...out];
 }
 

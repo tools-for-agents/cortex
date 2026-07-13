@@ -640,6 +640,17 @@ test('parseTags finds #tags but not markdown headings or mid-word hashes', () =>
     'a tag must start with a letter, so #123 is not one');
 });
 
+test('parseTags keeps a tag in any script — Turkish, accented, Cyrillic', () => {
+  // ASCII-only [A-Za-z]/\w dropped #İstanbul entirely and truncated #Café to "caf".
+  const tags = parseTags('gezi #İstanbul #Café #şehir #Москва (#öğrenme) #project/alpha and #ankara');
+  assert.ok(tags.includes('café'), '#Café is kept whole, not truncated to "caf"');
+  assert.ok(tags.includes('şehir'), 'a Turkish tag survives');
+  assert.ok(tags.includes('москва'), 'a Cyrillic tag survives');
+  assert.ok(tags.includes('öğrenme'), 'accents inside the tag survive');
+  assert.ok(tags.includes('istanbul'), '#İstanbul is kept AND its dotted-İ lowercases cleanly (no stray combining mark)');
+  assert.ok(tags.includes('project/alpha') && tags.includes('ankara'), 'nested and ASCII tags still work');
+});
+
 test('tagged(tag) lists notes for one tag exactly — a prefix is not a match', () => {
   // Tags live as a JSON array string; tagged() matches on `"tag"` WITH the quotes, so a
   // tag that is a prefix of another ('proj' vs 'project') does not bleed across.
