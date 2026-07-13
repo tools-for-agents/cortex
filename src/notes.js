@@ -16,10 +16,36 @@ export function slugify(s) {
     .slice(0, 80) || 'untitled';
 }
 
-const unquote = (s) => s.trim().replace(/^["']|["']$/g, '');
-// Quote anything that would confuse a YAML reader: empty, edge whitespace, or a
-// leading indicator / structural char. Values here are titles, tags, ISO dates.
-const needsQuote = (s) => s === '' || s !== s.trim() || /^[#\-[\]{}&*!|>%@`"']/.test(s) || /[:#[\]]/.test(s);
+// Unwrap a serialized scalar. A double-quoted value is JSON, so JSON.parse UN-ESCAPES it — that
+// is how a value holding a comma or a newline survives the round-trip. Single-quoted / bare are
+// taken literally. (A plain `.replace(/^"|"$/,'')` left `\n` as a literal backslash-n — data loss.)
+const unquote = (s) => {
+  s = s.trim();
+  if (s.length >= 2 && s[0] === '"' && s.endsWith('"')) { try { return JSON.parse(s); } catch { return s.slice(1, -1); } }
+  if (s.length >= 2 && s[0] === "'" && s.endsWith("'")) return s.slice(1, -1);
+  return s;
+};
+// Split an inline `[a, b]` array on commas that are OUTSIDE quotes — so a quoted tag "a,b" stays
+// one element instead of splitting into two. Backslash escapes inside "" are kept whole.
+const splitInline = (s) => {
+  const out = []; let cur = '', quote = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quote) {
+      cur += c;
+      if (c === '\\' && quote === '"') { cur += s[++i] ?? ''; continue; }
+      if (c === quote) quote = null;
+    } else if (c === '"' || c === "'") { quote = c; cur += c; }
+    else if (c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out;
+};
+// Quote anything that would confuse a YAML reader OR break the round-trip: empty, edge whitespace,
+// a leading indicator / structural char, or an embedded `: # [ ] , \n \r \t`. A comma would split an
+// inline array; a newline would spill onto the next frontmatter line and truncate the value.
+const needsQuote = (s) => s === '' || s !== s.trim() || /^[#\-[\]{}&*!|>%@`"']/.test(s) || /[:#[\],\n\r\t]/.test(s);
 
 // Parse `---\nkey: value\n---\nbody`. Supports scalars, inline [a, b] arrays and
 // block `- item` lists. Returns { data, body }.
@@ -42,7 +68,7 @@ export function parseFrontmatter(text) {
     if (val === '') { data[key] = []; listKey = key; continue; } // block list may follow
     listKey = null;
     if (val.startsWith('[') && val.endsWith(']'))
-      data[key] = val.slice(1, -1).split(',').map((x) => unquote(x)).filter(Boolean);
+      data[key] = splitInline(val.slice(1, -1)).map((x) => unquote(x)).filter(Boolean);
     else data[key] = unquote(val);
   }
   return { data, body: body.replace(/\s+$/, '') };

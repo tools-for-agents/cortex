@@ -632,16 +632,16 @@ import { parseFrontmatter, serializeFrontmatter, parseLinks, parseTags } from '.
 test('frontmatter round-trips tricky values without losing or corrupting them', () => {
   // colons, brackets, hyphens, leading dash, empty — the values that break a naive YAML writer
   const data = {
-    title: 'Note: the important one',        // a colon would be read as key:value on reparse
+    title: 'Note: with a comma, and\na newline',  // colon, comma AND a newline in one value
     type: 'concept',
-    tags: ['a-b', 'has:colon', 'urgent'],    // a colon inside an inline array item
+    tags: ['a-b', 'has:colon', 'a,b', 'multi, word', 'urgent'],  // commas INSIDE tags must not split them
     aliases: ['- dashy', '[bracket]'],       // leading indicator chars
   };
   const text = serializeFrontmatter(data) + '\n\nthe body\n';
   const { data: back, body } = parseFrontmatter(text);
 
-  assert.equal(back.title, data.title, 'a colon in the title survives the round trip');
-  assert.deepEqual(back.tags, data.tags, 'every tag comes back, colon and all');
+  assert.equal(back.title, data.title, 'a colon, a comma AND an embedded newline all survive the round trip');
+  assert.deepEqual(back.tags, data.tags, "every tag comes back whole — a comma inside 'a,b' does not split it into two");
   assert.deepEqual(back.aliases, data.aliases, 'and leading-indicator values are preserved');
   assert.equal(back.type, 'concept');
   // parseFrontmatter strips the single newline right after the closing fence; the blank-line
