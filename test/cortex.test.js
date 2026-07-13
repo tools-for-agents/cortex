@@ -480,3 +480,35 @@ test('a vault with attachments in it: cortex indexes the notes and NOT the binar
     'a png, a pdf and a canvas file are not notes — none of them may reach the index');
   assert.throws(() => cx.read('diagram.png'), /no note|ambiguous/, 'and none of them is a readable note');
 });
+
+// ALIASES ARE A FEATURE NOBODY WAS GUARDING.
+//
+// An Obsidian note declares `aliases: [ML]` and the whole vault links to it as [[ML]]. cortex
+// supports it — it indexes every alias into the name map and resolves through it — and NOT ONE
+// TEST TOUCHED IT. Two mutants proved it: drop the alias loop from the name index, or break the
+// alias comparison in resolveSlug, and the entire suite stays green.
+//
+// If it broke, every [[ML]] in the vault would quietly become a BROKEN LINK — cortex would tell
+// you to go and write a note that already exists, under its real name, right there.
+test('an alias is a name: it resolves, it links, and it is not a broken link', async () => {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(join(vault, 'machine-learning.md'),
+    '---\ntitle: Machine Learning\naliases: [ML, "deep learning"]\n---\nThe field itself.\n');
+  writeFileSync(join(vault, 'aliasindex.md'),
+    '---\ntitle: Alias Index\n---\nSee [[ML]] and [[deep learning]] and [[nowhere-at-all]].\n');
+  cx.sync();
+
+  // 1. you can ASK for it by its alias
+  assert.equal(cx.read('ML').title, 'Machine Learning', 'an alias is a way to name the note');
+  assert.equal(cx.read('deep learning').title, 'Machine Learning', 'and so is a multi-word one');
+
+  // 2. and a LINK through the alias resolves — it is not broken, and it is not ambiguous
+  const l = cx.lint();
+  assert.ok(!l.broken.some((b) => /^(ML|deep learning)$/.test(b.target)),
+    'a link through an alias is NOT broken — telling you to write a note that already exists is worse than silence');
+  assert.ok(l.broken.some((b) => b.target === 'nowhere-at-all'), 'while a genuinely dead link still is');
+
+  // 3. and the backlink lands on the real note, not on a ghost
+  assert.ok(cx.linksOf('Machine Learning', { direction: 'in' }).backlinks.some((b) => b.slug === 'aliasindex'),
+    'the note knows it was linked to, even though it was linked to by another name');
+});

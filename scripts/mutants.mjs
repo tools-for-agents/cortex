@@ -47,6 +47,12 @@ const CANARIES = [
     find: 'export const get = (sql, ...a) => { const d = open(false); return d ? d.prepare(sql).get(...a) : undefined; };',
     into: 'export const get = (sql, ...a) => { const d = open(true); return d ? d.prepare(sql).get(...a) : undefined; };',
   },
+  {
+    why: 'an alias is a NAME — drop it from the index and every [[ML]] in the vault becomes a broken link',
+    file: 'src/core.js',
+    find: "    for (const a of JSON.parse(r.aliases || '[]')) add(slugify(a), r.slug);",
+    into: '    void r;',
+  },
 ];
 
 const run = () => spawnSync('npm', ['test'], { encoding: 'utf8', timeout: 300_000 }).status;
