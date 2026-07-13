@@ -81,6 +81,30 @@ test('sync rebuilds the index from files on disk', () => {
   assert.equal(cx.stats().notes, before);
 });
 
+test('deleting a note file and re-syncing purges it from the index, search and links', () => {
+  // A cortex note is just a markdown file in the vault. Delete the file — the way a user
+  // would in Obsidian — and `sync` must forget the note, or search keeps serving a ghost
+  // that no longer exists on disk. This is the one path that reaches deleteNote().
+  cx.write('Anchor', { type: 'concept', body: 'A note the doomed one will point at.' });
+  const g = cx.write('Ghostly', { type: 'concept', tags: ['xylophonic'],
+    body: 'A doomed note that mentions xylophonic and points to [[Anchor]].' });
+  assert.ok(cx.search('xylophonic').results.some((x) => x.slug === g.slug), 'indexed and searchable first');
+  assert.ok(cx.linksOf('Anchor', { direction: 'in' }).backlinks.some((b) => b.slug === g.slug),
+    'and its outbound link to Anchor is live');
+
+  rmSync(join(vault, g.path)); // remove the file behind the index's back
+
+  const s = cx.sync();
+  assert.equal(s.removed, 1, 'sync reports exactly the one vanished note');
+
+  assert.equal(cx.search('xylophonic').results.some((x) => x.slug === g.slug), false,
+    'gone from search — no ghost in the results');
+  assert.equal(cx.recent().notes.some((n) => n.slug === g.slug), false, 'gone from recent');
+  assert.throws(() => cx.read('Ghostly'), 'reading a purged note fails, it does not return a husk');
+  assert.equal(cx.linksOf('Anchor', { direction: 'in' }).backlinks.some((b) => b.slug === g.slug), false,
+    'and its link is purged too — Anchor no longer thinks a dead note points at it');
+});
+
 test('graphData carries each note\'s updated time (the graph\'s time dimension)', () => {
   cx.write('Timed', { type: 'concept', body: 'A note with a timestamp. Links to [[Nowhere]].' });
   const g = cx.graphData();
