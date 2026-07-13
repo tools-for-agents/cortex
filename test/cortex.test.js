@@ -105,6 +105,20 @@ test('deleting a note file and re-syncing purges it from the index, search and l
     'and its link is purged too — Anchor no longer thinks a dead note points at it');
 });
 
+test('linksOf reports a note\'s OUTBOUND links and flags the broken ones (the default direction)', () => {
+  // cortex_links defaults to direction:'both'; the outbound half — including the broken-link
+  // flag that makes "broken links are a to-do list" true — had no coverage (tests all forced 'in').
+  const target = cx.write('Targetty', { type: 'concept', body: 'A real destination.' });
+  const hub = cx.write('Hubbly', { type: 'concept',
+    body: 'Points to [[Targetty]] which exists and [[Nonesuchh]] which does not.' });
+
+  const out = cx.linksOf(hub.slug).links; // default 'both' populates .links (outbound)
+  assert.ok(out.some((l) => l.slug === target.slug && l.broken === false),
+    'the live link resolves to the real note and is not broken');
+  assert.ok(out.some((l) => l.slug === null && l.broken === true),
+    'the dangling link is flagged broken — a note still to write');
+});
+
 test('graphData carries each note\'s updated time (the graph\'s time dimension)', () => {
   cx.write('Timed', { type: 'concept', body: 'A note with a timestamp. Links to [[Nowhere]].' });
   const g = cx.graphData();
