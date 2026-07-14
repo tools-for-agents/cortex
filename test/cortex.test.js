@@ -849,6 +849,87 @@ test('CONCURRENT WRITERS do not lose notes — the whole point of a SHARED brain
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('CONCURRENT APPENDS to one note must not LOSE each other — a lock is not atomicity', async () => {
+  // busy_timeout stopped concurrent writes being DROPPED. It does nothing about them being LOST:
+  //   A reads the body. B reads the SAME body. A writes body+"A". B writes body+"B". A's line is gone.
+  // Measured: 4 agents appending 10 lines each → 13 of 40 lines survived, and TWO agents' entire
+  // contribution vanished (0/10 each) while every call reported SUCCESS. Data loss with a success
+  // receipt: no error to catch, nothing to retry, nothing to notice.
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join: pjoin } = await import('node:path');
+
+  const dir = mkdtempSync(pjoin(tmpdir(), 'cortex-append-'));
+  const v = pjoin(dir, 'vault');
+  const script = pjoin(dir, 'a.mjs');
+  const core = new URL('../src/core.js', import.meta.url).href;
+  writeFileSync(script, `
+    const m = await import(${JSON.stringify(core)});
+    const tag = process.argv[2];
+    for (let i = 0; i < 8; i++) m.write('Shared Log', { append: true, body: 'line from ' + tag + ' #' + i });
+  `);
+
+  try {
+    execFileSync(process.execPath, ['-e', `import(${JSON.stringify(core)}).then(m => m.write('Shared Log', { body: 'start' }))`],
+      { env: { ...process.env, CORTEX_VAULT: v } });
+
+    await Promise.all(['A', 'B', 'C', 'D'].map((tag) => new Promise((res, rej) => {
+      import('node:child_process').then(({ execFile }) => {
+        execFile(process.execPath, [script, tag], { env: { ...process.env, CORTEX_VAULT: v } },
+          (err) => (err ? rej(err) : res()));
+      });
+    })));
+
+    const body = execFileSync(process.execPath,
+      ['-e', `import(${JSON.stringify(core)}).then(m => console.log(m.read('Shared Log').body))`],
+      { env: { ...process.env, CORTEX_VAULT: v }, encoding: 'utf8' });
+
+    for (const tag of ['A', 'B', 'C', 'D']) {
+      const n = (body.match(new RegExp('from ' + tag + ' ', 'g')) || []).length;
+      assert.equal(n, 8, `agent ${tag} wrote 8 lines and ALL 8 must survive — found ${n}`);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('busy_timeout carries the writes that are NOT inside the lock — sync() is one', async () => {
+  // A surviving canary found this hole. write() is wrapped in withWriteLock now, and that lock alone
+  // is enough to keep concurrent write()s intact — so the concurrency test above passed even with
+  // busy_timeout disabled, and NOTHING was guarding the pragma. But sync(), remove() and rebuildLinks
+  // issue raw statements OUTSIDE that lock, and there busy_timeout is the only thing standing between
+  // an agent and SQLITE_BUSY: with it disabled, 25 of 80 concurrent syncs FAILED outright.
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join: pjoin } = await import('node:path');
+
+  const dir = mkdtempSync(pjoin(tmpdir(), 'cortex-sync-'));
+  const v = pjoin(dir, 'vault');
+  const script = pjoin(dir, 's.mjs');
+  const core = new URL('../src/core.js', import.meta.url).href;
+  writeFileSync(script, `
+    const m = await import(${JSON.stringify(core)});
+    const startAt = +process.argv[2];
+    while (Date.now() < startAt) {}         // start together, so they genuinely OVERLAP
+    for (let i = 0; i < 8; i++) m.sync({ reindex: true });   // throws on SQLITE_BUSY
+  `);
+
+  try {
+    execFileSync(process.execPath,
+      ['-e', `import(${JSON.stringify(core)}).then(m => { for (let i = 0; i < 12; i++) m.write('n' + i, { body: 'b' + i }); })`],
+      { env: { ...process.env, CORTEX_VAULT: v } });
+
+    const startAt = Date.now() + 400;
+    // A sync that THREW is the bug. Promise.all rejects, and the test fails — which is the point.
+    await Promise.all(['A', 'B', 'C', 'D'].map((tag) => new Promise((res, rej) => {
+      import('node:child_process').then(({ execFile }) => {
+        execFile(process.execPath, [script, String(startAt)], { env: { ...process.env, CORTEX_VAULT: v } },
+          (err) => (err ? rej(new Error(`agent ${tag}: ${err.message.slice(0, 90)}`)) : res()));
+      });
+    })));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 function pathToCore() {
   return new URL('../src/core.js', import.meta.url).href;
 }

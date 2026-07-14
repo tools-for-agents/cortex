@@ -114,3 +114,33 @@ export const get = (sql, ...a) => { const d = open(false); return d ? d.prepare(
 export const all = (sql, ...a) => { const d = open(false); return d ? d.prepare(sql).all(...a) : []; };
 export const run = (sql, ...a) => open(true).prepare(sql).run(...a);
 export { DB_PATH };
+
+// ── A LOCK THAT SERIALISES DOES NOT MAKE A READ-MODIFY-WRITE ATOMIC ────────────
+//
+// busy_timeout stopped concurrent writes from being DROPPED. It does nothing about them being
+// LOST — a different bug with the same shape and none of the noise:
+//
+//   A reads the note body.  B reads the SAME body.  A writes body+"A".  B writes body+"B".
+//   A's line is gone, and B was told it succeeded.
+//
+// Measured: 4 agents appending 10 lines each to one note → 13 of 40 lines survived, and TWO agents'
+// entire contribution vanished (0/10 each) with every call reporting success. THAT IS THE WHOLE
+// FAILURE: data loss WITH A SUCCESS RECEIPT — no error to catch, nothing to retry, nothing to notice.
+//
+// The read and the write must be ONE critical section, across PROCESSES. Every cortex process shares
+// this index, so SQLite's own write lock is the mutex: BEGIN IMMEDIATE takes it up front, and
+// busy_timeout (above) makes the others WAIT for it rather than fail. Reentrant, because daily() and
+// capture() read-then-write and then call write(), which locks again.
+let _depth = 0;
+export function withWriteLock(fn) {
+  const d = writeDb();
+  if (_depth++ === 0) d.exec('BEGIN IMMEDIATE;');
+  try {
+    const r = fn();
+    if (--_depth === 0) d.exec('COMMIT;');
+    return r;
+  } catch (e) {
+    if (--_depth === 0) { try { d.exec('ROLLBACK;'); } catch { /* nothing to roll back */ } }
+    throw e;
+  }
+}

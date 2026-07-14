@@ -5,7 +5,7 @@
 // back out — a durable memory that a human can also open in Obsidian.
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, basename } from 'node:path';
-import { writeDb, get, all, run, VAULT, storeExists } from './db.js';
+import { writeDb, get, all, run, VAULT, storeExists, withWriteLock } from './db.js';
 import { slugify, parseFrontmatter, serializeFrontmatter, parseLinks, parseTags, estTokens } from './notes.js';
 
 export { VAULT };
@@ -189,7 +189,12 @@ function requireSlug(q) {
 }
 
 // ── write / update a note ──────────────────────────────────────────────────────
-export function write(title, { body = '', type, tags, aliases, append = false } = {}) {
+// The read (`existing`) and the write MUST be one critical section: without it, two agents appending
+// to the same note both read the old body and the second silently overwrites the first. See
+// withWriteLock in db.js — 4 agents lost 27 of 40 lines, and every call said it worked.
+export function write(title, opts = {}) { return withWriteLock(() => writeLocked(title, opts)); }
+
+function writeLocked(title, { body = '', type, tags, aliases, append = false } = {}) {
   if (!title || !String(title).trim()) throw new Error('title is required');
   const slug = slugify(title);
   const existing = get('SELECT * FROM notes WHERE slug=?', slug);
@@ -224,7 +229,10 @@ export function write(title, { body = '', type, tags, aliases, append = false } 
 }
 
 // ── capture raw material into the source inbox (agent distils it later) ────────
-export function capture(text, { title, source } = {}) {
+export function capture(text, opts = {}) { return withWriteLock(() => captureLocked(text, opts)); }
+
+// capture() READS whether the note exists and then writes — the same read-modify-write, one door over.
+function captureLocked(text, { title, source } = {}) {
   if (!text || !String(text).trim()) throw new Error('text is required');
   const t = title || (source ? `Source — ${source}` : String(text).trim().split('\n')[0].slice(0, 60)) || 'Captured';
   const header = source ? `> source: ${source}\n> captured: ${nowISO()}\n\n` : '';
@@ -573,7 +581,11 @@ export function graphData() {
 }
 
 // ── daily note: append a timestamped bullet to today's journal ────────────────
-export function daily(text) {
+export function daily(text) { return withWriteLock(() => dailyLocked(text)); }
+
+// daily() READS today's note and then writes the merged body — the read is outside write()'s own
+// lock, so two agents journalling at the same second would each drop the other's line.
+function dailyLocked(text) {
   if (!text || !String(text).trim()) throw new Error('text is required');
   const d = today();
   const stamp = localHM();

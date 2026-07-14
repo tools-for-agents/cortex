@@ -83,6 +83,12 @@ const CANARIES = [
     find: "      db.exec('PRAGMA busy_timeout = 5000;');",
     into: "      db.exec('PRAGMA busy_timeout = 0;');",
   },
+  {
+    why: 'a lock is not ATOMICITY — without the critical section two agents appending to one note read the same body and the second silently erases the first (27 of 40 lines lost)',
+    file: 'src/db.js',
+    find: '  if (_depth++ === 0) d.exec(\'BEGIN IMMEDIATE;\');',
+    into: '  if (false) d.exec(\'BEGIN IMMEDIATE;\');',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,
