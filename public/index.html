@@ -64,6 +64,11 @@
   .results .r .tt{font-size:14px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .results .r .sn{font-size:12px;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .results .r .ty{margin-left: auto;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);flex:none;}
+  /* On the selected/hovered row the background lightens to --card, which drops --ink-faint below AA
+     (iris measured 4.43:1). The type label must stay legible on the row you are about to open. */
+  .results .r.sel .ty,.results .r:hover .ty{color:var(--ink-dim);}
+  /* The picker shows the top k; when more matched, this owns the gap so the list never looks complete when it is not. */
+  .results .r-more{padding: 10px 16px;font-size:12px;color:var(--ink-dim);border-top:1px solid var(--line);background:var(--card);cursor:default;}
   .results .empty{padding: 16px 16px;font-size:12px;color:var(--ink-dim);}
 
   /* ── controls ── */
@@ -1383,16 +1388,20 @@ const statEl=document.querySelector(".stat");statEl.style.cursor="pointer";statE
 
 // ── search with dropdown ──────────────────────────────────────────────────────
 const q=document.getElementById("q"),results=document.getElementById("results");
-let matches=[],selIdx=-1,searchSeq=0;
+let matches=[],selIdx=-1,searchSeq=0,lastWithheld=0,lastMatched=0;
 async function runSearch(){const v=q.value.trim();
   if(!v){matches=[];results.classList.remove("on");hovered=null;return;}
   const seq=++searchSeq;let r;try{r=await (await fetch("/api/search?q="+encodeURIComponent(v)+"&k=8")).json();}catch(e){return;}
   if(seq!==searchSeq)return;
   matches=(r.results||[]).map(x=>({node:bySlug.get(x.slug),slug:x.slug,title:x.title,type:x.type,excerpt:(x.excerpt||"").replace(/\s+/g," ").trim()})).filter(x=>x.node);
+  // The picker shows the top k. If more matched, SAY SO — a list that hides notes while looking
+  // complete makes the reader believe the vault holds only these (the Cycle-75 lie, on the browser).
+  lastWithheld=r.withheld||0;lastMatched=r.matched||matches.length;
   selIdx=matches.length?0:-1;drawResults(v);hovered=matches[0]?matches[0].node:null;}
 function snippet(n,v){const b=n.body.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,(m,a,al)=>al||a);const i=b.toLowerCase().indexOf(v);if(i<0)return b.slice(0,60);return (i>14?"…":"")+b.slice(Math.max(0,i-12),i+48);}
 function drawResults(v){if(!matches.length){results.innerHTML=`<div class="empty">no notes match “${esc(v)}”</div>`;results.classList.add("on");return;}
-  results.innerHTML=matches.map((x,i)=>{const c=colorOf(x.node);return `<div class="r ${i===selIdx?"sel":""}" data-i="${i}"><span class="d" style="color:${c};background:${c}"></span><div class="tx"><div class="tt">${esc(x.title)}</div><div class="sn">${esc(x.excerpt)}</div></div><span class="ty">${(TYPE[x.type]||{label:x.type}).label}</span></div>`;}).join("");
+  results.innerHTML=matches.map((x,i)=>{const c=colorOf(x.node);return `<div class="r ${i===selIdx?"sel":""}" data-i="${i}"><span class="d" style="color:${c};background:${c}"></span><div class="tx"><div class="tt">${esc(x.title)}</div><div class="sn">${esc(x.excerpt)}</div></div><span class="ty">${(TYPE[x.type]||{label:x.type}).label}</span></div>`;}).join("")
+    +(lastWithheld>0?`<div class="r-more">showing ${matches.length} of ${lastMatched} — ${lastWithheld} more match${lastWithheld===1?"es":""}; refine to narrow</div>`:"");
   results.classList.add("on");
   results.querySelectorAll(".r").forEach(el=>{el.addEventListener("mouseenter",()=>{selIdx=+el.dataset.i;hovered=matches[selIdx].node;results.querySelectorAll(".r").forEach(x=>x.classList.toggle("sel",x===el));});
     el.addEventListener("click",()=>{openNote(matches[+el.dataset.i].slug);closeResults();});});}
