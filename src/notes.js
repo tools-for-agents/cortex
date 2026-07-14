@@ -7,13 +7,23 @@ const TRANSLIT = { ç: 'c', ğ: 'g', ı: 'i', ş: 's', ü: 'u', ö: 'o', â: 'a'
   Ç: 'c', Ğ: 'g', İ: 'i', Ş: 's', Ü: 'u', Ö: 'o', ø: 'o', å: 'a', æ: 'ae', ß: 'ss' };
 
 export function slugify(s) {
-  const t = String(s).trim().replace(/[çğışüöâîûÇĞİŞÜÖøåæß]/g, (c) => TRANSLIT[c] || c);
-  return t.toLowerCase()
+  const str = String(s).trim();
+  const t = str.replace(/[çğışüöâîûÇĞİŞÜÖøåæß]/g, (c) => TRANSLIT[c] || c);
+  const base = t.toLowerCase()
     .normalize('NFKD').replace(/[̀-ͯ]/g, '') // strip remaining diacritics
     .replace(/['"`]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'untitled';
+    .slice(0, 80);
+  if (base) return base;
+  // No ascii survived — a pure Cyrillic / CJK / emoji / symbol title. A shared 'untitled'
+  // fallback made DISTINCT such titles collide on one slug and silently overwrite each other
+  // (a note titled 'Москва' replaced by one titled 'Петербург'). Derive a STABLE, DISTINCT slug
+  // from the title instead. Slugs stay ascii for cross-platform-safe filenames; the real title
+  // is preserved verbatim in the note's frontmatter, so nothing about the title is lost.
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return `note-${(h >>> 0).toString(36)}`;
 }
 
 // Unwrap a serialized scalar. A double-quoted value is JSON, so JSON.parse UN-ESCAPES it — that

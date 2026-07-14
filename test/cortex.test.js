@@ -96,6 +96,26 @@ test('slugify transliterates Turkish/accented titles to clean ascii', () => {
   assert.equal(cx.write('Café Déjà', { body: 'x' }).slug, 'cafe-deja');
 });
 
+test('titles with NO ascii (Cyrillic/CJK/emoji) get DISTINCT slugs — they used to overwrite each other', () => {
+  // Every such title slugified to the shared fallback 'untitled', so the second write REPLACED the
+  // first: three notes went in, one came out, and read('Москва') handed back the note titled '日本語'.
+  const a = cx.write('Москва', { body: 'the capital of russia' });
+  const b = cx.write('Петербург', { body: 'the former capital' });
+  const c = cx.write('日本語', { body: 'the japanese language' });
+
+  assert.equal(new Set([a.slug, b.slug, c.slug]).size, 3, 'three titles must not share one slug');
+
+  // The real assertion is not the slug — it is that each note still holds ITS OWN content.
+  assert.match(cx.read('Москва').body, /capital of russia/);
+  assert.match(cx.read('Петербург').body, /former capital/);
+  assert.match(cx.read('日本語').body, /japanese language/);
+  // The title is preserved verbatim even though the slug is ascii.
+  assert.equal(cx.read('Москва').title, 'Москва');
+
+  // And the slug must be STABLE, or append/update would fork a new note on every call.
+  assert.equal(cx.write('Москва', { body: 'more', append: true }).slug, a.slug);
+});
+
 test('daily appends timestamped journal lines to one note per day', () => {
   cx.daily('did a thing');
   cx.daily('did another');
