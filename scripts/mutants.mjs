@@ -30,6 +30,18 @@ const CANARIES = [
     into: '    for (const rel of list) m.set(rel, b);',
   },
   {
+    why: 'snippet() is superlinear — unbounded, ONE huge note hangs every search that touches it (142s on 4MB)',
+    file: 'src/core.js',
+    find: 'const SNIPPET_MAX = 64 * 1024; // bounds snippet() at ~30ms worst case; every real note is far below',
+    into: 'const SNIPPET_MAX = Infinity; // bounds snippet() at ~30ms worst case; every real note is far below',
+  },
+  {
+    why: 'a title with no ascii must get a DISTINCT slug — a shared fallback let each such note overwrite the last',
+    file: 'src/notes.js',
+    find: '  return `note-${(h >>> 0).toString(36)}`;',
+    into: "  return 'untitled';",
+  },
+  {
     why: 'an ambiguous name is not a missing note — it is two, and picking one silently is the bug',
     file: 'src/core.js',
     find: '  if (byBase.length > 1) ambiguous(q, byBase);',

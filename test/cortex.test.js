@@ -64,6 +64,34 @@ test('search owns up to what the budget/k hid — it never looks complete when i
   assert.equal(roomy.limited_by, null, 'and it does not cry wolf — limited_by is null');
 });
 
+test('ONE huge note must not hang every search that touches it', () => {
+  // SQLite's snippet() is superlinear in document size: 3ms at 16KB, 792ms at 256KB, and 142
+  // SECONDS on a 4MB note — while the MATCH that found the row costs 1ms. So a single oversized
+  // note hung EVERY search whose term it contained, and cortex never errored: it just stopped
+  // answering. 1MB here (10.7s unfixed) keeps the test quick while sitting far past the threshold.
+  const body = 'zzhugetopic lorem ipsum dolor sit amet '.repeat(Math.floor((1024 * 1024) / 39));
+  cx.write('The Huge One', { body });
+
+  const t0 = Date.now();
+  const res = cx.search('zzhugetopic', { k: 3 });
+  const ms = Date.now() - t0;
+  assert.ok(ms < 2000, `search over a 1MB note must stay bounded — took ${ms}ms (10.7s+ unfixed)`);
+
+  const hit = res.results.find((r) => r.slug === 'the-huge-one');
+  assert.ok(hit, 'and the note is still FOUND — bounding the excerpt must not drop the result');
+  // The result says what it is, rather than let the caller assume the usual best-window excerpt.
+  assert.equal(hit.oversized, true, 'an oversized note says so');
+  assert.ok(hit.chars > 1e6, 'and reports its real size');
+  assert.equal(hit.excerpt_is_match, true, 'instr() still found a REAL window around a REAL match');
+  assert.match(hit.excerpt, /zzhugetopic/, 'so the excerpt actually contains the term');
+
+  // And a normal note is completely unaffected: still snippet()-highlighted, still unflagged.
+  const normal = cx.search('zzbudgettopic', { k: 1 }).results[0];
+  assert.ok(normal, 'normal notes still match');
+  assert.equal(normal.oversized, undefined, 'a normal note is not flagged oversized');
+  assert.match(normal.excerpt, /⟦/, 'and still gets snippet() highlighting — behaviour is unchanged');
+});
+
 test('append merges body and unions tags', () => {
   const r = cx.write('Alpha', { append: true, tags: ['y'], body: 'More text.' });
   assert.equal(r.action, 'updated');

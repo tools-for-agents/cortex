@@ -270,15 +270,47 @@ function corpus() {
   try { return get(`SELECT COUNT(*) n FROM notes`)?.n ?? 0; } catch { return 0; }
 }
 
+// SQLite's snippet() is superlinear in the size of the document it excerpts: 3ms on a 16KB note,
+// 792ms at 256KB, 10s at 1MB, and 142 SECONDS on a 4MB one — while the MATCH that found the row
+// costs 1ms and bm25() 3ms. So ONE oversized note does not merely slow itself down: it hangs EVERY
+// search whose term it happens to contain, and the tool never errors — it just stops answering.
+//
+// A cap on write() could not have saved us. A cortex vault is Obsidian-compatible, so notes arrive
+// by being DROPPED IN A FOLDER and picked up by sync() — clone a vault with one big exported note
+// and search is hung, with no write() ever called. Search must never hang, whatever is in the vault.
+//
+// CASE short-circuits in SQLite, so snippet() is never evaluated for an oversized body.
+const SNIPPET_MAX = 64 * 1024; // bounds snippet() at ~30ms worst case; every real note is far below
+
+// The excerpt for an oversized note, without snippet(). instr() is a plain C scan — 2ms on the same
+// 4MB body snippet() needs 142s for — so we can still show a REAL window around a REAL match rather
+// than fob the caller off with a meaningless head-of-document.
+function bigExcerpt(slug, query) {
+  for (const term of String(query).match(/[\p{L}\p{N}_]+/gu) || []) {
+    const r = get(`SELECT instr(lower(body), lower(?)) AS at,
+                          substr(body, MAX(1, instr(lower(body), lower(?)) - 90), 240) AS x
+                     FROM notes WHERE slug = ?`, term, term, slug);
+    if (r?.at > 0) return { text: r.x, located: true };
+  }
+  // The tokenizer stems (porter), so a term can MATCH a note without occurring in it literally
+  // ("running" matches "run"). Then there is no window to find. The head of the note is the honest
+  // fallback — but it is NOT the matching passage, and must not be handed over as though it were.
+  return { text: get('SELECT substr(body, 1, 240) AS x FROM notes WHERE slug = ?', slug)?.x || '',
+    located: false };
+}
+
 export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
   const searched = { notes: corpus(), vault: VAULT };
   const m = ftsQuery(query);
   if (!m) return { query, searched, count: 0, tokens: 0, results: [] };
-  let sql = `SELECT n.slug, n.title, n.type, n.tags,
-               snippet(notes_fts, 3, '⟦', '⟧', ' … ', 16) AS snip, bm25(notes_fts) AS score
+  let sql = `SELECT n.slug, n.title, n.type, n.tags, length(notes_fts.body) AS chars,
+               CASE WHEN length(notes_fts.body) <= ?
+                    THEN snippet(notes_fts, 3, '⟦', '⟧', ' … ', 16)
+                    ELSE NULL END AS snip,
+               bm25(notes_fts) AS score
              FROM notes_fts JOIN notes n ON n.slug = notes_fts.slug
              WHERE notes_fts MATCH ?`;
-  const args = [m];
+  const args = [SNIPPET_MAX, m];
   if (type) { sql += ' AND n.type=?'; args.push(type); }
   if (tag) { sql += " AND n.tags LIKE ? ESCAPE '\\'"; args.push(tagLike(tag)); }
   sql += ' ORDER BY score LIMIT ?'; args.push(Math.max(k * 3, 20));
@@ -288,11 +320,16 @@ export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
   let tokens = 0, squeezed = 0;
   for (const r of rows) {
     if (results.length >= k) break;
-    const excerpt = (r.snip || '').replace(/\s+/g, ' ').trim();
+    const big = r.snip === null; // snippet() was skipped: this note is too large to excerpt that way
+    const raw = big ? bigExcerpt(r.slug, query) : { text: r.snip || '', located: true };
+    const excerpt = raw.text.replace(/\s+/g, ' ').trim();
     const tk = estTokens(excerpt);
     if (tokens + tk > max_tokens && results.length > 0) { squeezed++; continue; }
-    results.push({ slug: r.slug, title: r.title, type: r.type, tags: JSON.parse(r.tags || '[]'),
-      score: Math.round(r.score * 1000) / 1000, tokens: tk, excerpt });
+    const hit = { slug: r.slug, title: r.title, type: r.type, tags: JSON.parse(r.tags || '[]'),
+      score: Math.round(r.score * 1000) / 1000, tokens: tk, excerpt };
+    // Say so, rather than let the caller assume this excerpt is the usual best-matching window.
+    if (big) { hit.oversized = true; hit.chars = r.chars; hit.excerpt_is_match = raw.located; }
+    results.push(hit);
     tokens += tk;
   }
 
