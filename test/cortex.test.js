@@ -947,17 +947,25 @@ test('a SYNC must not make a note VANISH while it is being reindexed', async () 
   const env = { ...process.env, CORTEX_VAULT: v };
   const N = 15;
 
+  // 🔑 THE SEARCHER MUST RUN FOR EXACTLY AS LONG AS THE SYNC — NOT FOR A FIXED TIME. A fixed window
+  // only HOPES to overlap the writes: scout's twin of this test caught the race locally and MISSED it
+  // in CI, so its canary SURVIVED there. A race test that only sometimes reproduces the race only
+  // sometimes guards — and a flaky canary teaches you to ignore the gate. The writer drops a sentinel
+  // when it is done and the searcher polls until it appears: full overlap, on any hardware.
+  const done = pjoin(dir, 'DONE');
   const syncer = pjoin(dir, 'sync.mjs');
   writeFileSync(syncer, `
+    import fs from 'node:fs';
     const m = await import(${JSON.stringify(core)});
     for (let i = 0; i < 8; i++) m.sync({ reindex: true });
+    fs.writeFileSync(${JSON.stringify(done)}, 'x');
   `);
   const seek = pjoin(dir, 'seek.mjs');
   writeFileSync(seek, `
+    import fs from 'node:fs';
     const m = await import(${JSON.stringify(core)});
     let min = 1e9;
-    const t0 = Date.now();
-    while (Date.now() - t0 < 2500) { const r = m.search('zzsyncrace', { k: 50 }); if (r.matched < min) min = r.matched; }
+    while (!fs.existsSync(${JSON.stringify(done)})) { const r = m.search('zzsyncrace', { k: 50 }); if (r.matched < min) min = r.matched; }
     console.log(min);
   `);
 
@@ -993,22 +1001,27 @@ test('a note file is never TORN — the markdown IS the truth, and it must never
   const core = new URL('../src/core.js', import.meta.url).href;
   const env = { ...process.env, CORTEX_VAULT: v };
 
+  const tornDone = pjoin(dir, 'DONE');
   const writer = pjoin(dir, 'w.mjs');
   const NL = String.fromCharCode(10);
   wf(writer, [
+    `import fs from 'node:fs';`,
     `const m = await import(${JSON.stringify(core)});`,
     `const NL = String.fromCharCode(10);`,
-    `const big = ('IMPORTANT CONTENT LINE' + NL).repeat(200000);`,   // ~4.5MB: a window wide enough to hit
+    `const big = ('IMPORTANT CONTENT LINE' + NL).repeat(200000);`,   // ~4.5MB: a wide O_TRUNC window
     `for (let i = 0; i < 40; i++) m.write('Torn Note', { body: big + NL + 'revision ' + i });`,
+    // The reader must watch for exactly as long as the writer runs — not for a fixed time it hopes
+    // overlaps. A race test that only sometimes reproduces the race only sometimes guards.
+    `fs.writeFileSync(${JSON.stringify(pjoin(dir, 'DONE'))}, 'x');`,
   ].join(NL));
   const watcher = pjoin(dir, 'r.mjs');
   wf(watcher, [
     `import fs from 'node:fs';`,
     `const p = ${JSON.stringify(pjoin(v, 'notes', 'torn-note.md'))};`,
     `const done = /revision [0-9]+\\s*$/;`,   // every COMPLETE state ends in a revision marker…
+    `const SENTINEL = ${JSON.stringify(pjoin(dir, 'DONE'))};`,
     `let torn = 0;`,
-    `const t0 = Date.now();`,
-    `while (Date.now() - t0 < 2500) {`,
+    `while (!fs.existsSync(SENTINEL)) {`,
     `  let s; try { s = fs.readFileSync(p, 'utf8'); } catch { continue; }`,
     `  // …or is the untouched seed. Anything else is a HALF-WRITTEN note.`,
     `  if (s.length && !done.test(s.trim()) && s.indexOf('SEED CONTENT') === -1) torn++;`,
@@ -1026,6 +1039,7 @@ test('a note file is never TORN — the markdown IS the truth, and it must never
       m.write('Torn Note', { body: 'SEED CONTENT' });
     `);
     await run(pjoin(dir, 'seed.mjs'));
+    rmSync(tornDone, { force: true });   // the seed run does not drop it, but be explicit
 
     const [, torn] = await Promise.all([run(writer), run(watcher)]);   // rewrite WHILE reading
     assert.equal(+torn.trim(), 0, `a reader must NEVER see a half-written note — saw ${torn.trim()} torn reads`);
