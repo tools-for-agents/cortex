@@ -786,3 +786,25 @@ test('a tag with a SQL LIKE metacharacter (_ or %) matches literally, not as a w
   const sf = cx.search('tag', { tag: 'a_b' }).results.map((r) => r.slug);
   assert.ok(!sf.includes(axb.slug), "search tag='a_b' does not wildcard-match 'axb' either");
 });
+
+test('cortex_read has a CEILING — the truncation was always there, disarmed by a missing default', () => {
+  // `read(query, { max_tokens })` had NO default, so on the ordinary call — cortex_read { note } —
+  // max_tokens was undefined, `if (max_tokens && …)` never fired, and read() returned the WHOLE note
+  // however large: 1,048,572 tokens for a 4MB one, EIGHT TIMES a 128k context window, reporting
+  // `truncated: false`. Every sibling is budgeted; read() was the one that was not, and the guard
+  // that should have caught it sat right there, switched off by an argument nobody passed.
+  cx.write('Enormous', { body: 'zzreadbig lorem ipsum dolor sit amet '.repeat(20_000) });  // ~700KB
+
+  const r = cx.read('Enormous');
+  assert.ok(r.tokens <= 6100, `the default ceiling holds — got ${r.tokens} tokens`);
+  assert.equal(r.truncated, true, 'and it SAYS it was cut — never a silent truncation');
+  assert.ok(r.full_tokens > 100_000, 'reporting how big the note really is, so the cut is not a dead end');
+  assert.match(r.body, /raise max_tokens/, 'and what to do about it');
+
+  // A ceiling, not a wall: ask for more and you get more.
+  assert.ok(cx.read('Enormous', { max_tokens: 50_000 }).tokens > 40_000, 'max_tokens raises the ceiling');
+  // And a normal note is completely unaffected.
+  const small = cx.read('Ağ Katmanı');
+  assert.equal(small.truncated, false, 'a normal note is not truncated');
+  assert.ok(!/truncated at/.test(small.body), 'and carries no truncation notice');
+});

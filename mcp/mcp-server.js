@@ -48,7 +48,8 @@ const tools = [
     name: 'cortex_read',
     description: 'Read a full note by title, slug or alias. Returns its markdown body, tags and backlink count.',
     inputSchema: { type: 'object', properties: {
-      note: { type: 'string' }, max_tokens: { type: 'integer' },
+      note: { type: 'string' },
+      max_tokens: { type: 'integer', description: 'token ceiling for the returned body (default 6000). Truncation is reported, with the note\'s full size.' },
     }, required: ['note'] },
     run: (a) => cx.read(a.note, a),
   },

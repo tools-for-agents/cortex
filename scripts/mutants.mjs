@@ -71,6 +71,12 @@ const CANARIES = [
     find: "    if (val.startsWith('[') && val.endsWith(']'))",
     into: "    if (val.startsWith('[') || val.endsWith(']'))",
   },
+  {
+    why: 'cortex_read has a CEILING — with no default it returned a 4MB note whole: 1,048,572 tokens, 8x a 128k window',
+    file: 'src/core.js',
+    find: 'const READ_MAX_TOKENS = 6000;   // ~24KB — larger than any note a person writes, fatal to nothing real',
+    into: 'const READ_MAX_TOKENS = Infinity;',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

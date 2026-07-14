@@ -233,13 +233,30 @@ export function capture(text, { title, source } = {}) {
 }
 
 // ── read a note ────────────────────────────────────────────────────────────────
-export function read(query, { max_tokens } = {}) {
+// 🔑 THE TRUNCATION BELOW WAS ALWAYS THERE. IT WAS DISARMED BY A MISSING DEFAULT.
+// `{ max_tokens }` had none, so on the ordinary call — `cortex_read { note: "X" }`, which is how an
+// agent reads a note — max_tokens was `undefined`, the `if (max_tokens && …)` never fired, and read()
+// returned the WHOLE note however large: 1,048,572 tokens for a 4MB one, EIGHT TIMES a 128k context
+// window, reporting `truncated: false`. Every other content-returning tool in this kit is budgeted
+// (cortex_search 1800 · scout_fetch 6000 · recall 2000 · recall_expand capped); read() was the one
+// that was not, and the guard that should have caught it was sitting right there, switched off by an
+// argument nobody passed. A ceiling that only applies when the caller asks for one is not a ceiling.
+const READ_MAX_TOKENS = 6000;   // ~24KB — larger than any note a person writes, fatal to nothing real
+
+export function read(query, { max_tokens = READ_MAX_TOKENS } = {}) {
+  max_tokens = Number.isFinite(+max_tokens) && +max_tokens > 0 ? Math.floor(+max_tokens) : READ_MAX_TOKENS;
   const slug = requireSlug(query);
   const n = get('SELECT * FROM notes WHERE slug=?', slug);
   let body = n.body || '';
   let truncated = false;
-  if (max_tokens && estTokens(body) > max_tokens) { body = body.slice(0, max_tokens * 4) + '\n…[truncated]'; truncated = true; }
-  return { slug, title: n.title, type: n.type, path: n.path,
+  let full_tokens = estTokens(body);
+  // Never a silent cut, and never a dead end: say it was cut, how big it really is, and what to do.
+  if (estTokens(body) > max_tokens) {
+    body = body.slice(0, max_tokens * 4)
+      + `\n\n…[truncated at ${max_tokens} of ${full_tokens} tokens — raise max_tokens, or use cortex_search to find within this note]`;
+    truncated = true;
+  }
+  return { slug, title: n.title, type: n.type, path: n.path, full_tokens,
     tags: JSON.parse(n.tags || '[]'), aliases: JSON.parse(n.aliases || '[]'),
     created: n.created, updated: n.updated,
     backlinks: get('SELECT COUNT(DISTINCT src) n FROM links WHERE dst=?', slug)?.n ?? 0,
