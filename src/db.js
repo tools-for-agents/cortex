@@ -26,16 +26,10 @@ const DB_PATH = join(VAULT, '.cortex', 'index.db');
 // intent. `storeExists()` lets the caller tell the two apart and say so out loud.
 export const storeExists = () => existsSync(DB_PATH);
 
-let _db = null;
-function open(create) {
-  if (_db) return _db;
-  if (!existsSync(DB_PATH)) {
-    if (!create) return null;                     // nothing here, and we will not invent it
-    mkdirSync(join(VAULT, '.cortex'), { recursive: true });
-  }
-  _db = new DatabaseSync(DB_PATH);
-  _db.exec('PRAGMA journal_mode = WAL;');
-  _db.exec(`
+// Block this thread for `ms`. Opening the database is synchronous, so a retry has to be too.
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+const SCHEMA = `
 -- one row per markdown note (mirror of the file, for fast graph + list queries)
 CREATE TABLE IF NOT EXISTS notes (
   slug     TEXT PRIMARY KEY,
@@ -64,8 +58,53 @@ CREATE INDEX IF NOT EXISTS links_dst ON links(dst);
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
   slug UNINDEXED, title, tags, body, tokenize = 'porter unicode61'
 );
-`);
-  return _db;
+`;
+
+let _db = null;
+function open(create) {
+  if (_db) return _db;
+  if (!existsSync(DB_PATH)) {
+    if (!create) return null;                     // nothing here, and we will not invent it
+    mkdirSync(join(VAULT, '.cortex'), { recursive: true });
+  }
+
+  // 🔑 WAL LETS READERS AND A WRITER COEXIST. IT DOES NOTHING FOR TWO WRITERS.
+  // Without busy_timeout the second writer does not WAIT for the lock — it fails INSTANTLY with
+  // SQLITE_BUSY. Measured with two agents writing one vault: 45 of 60 writes LOST ("database is
+  // locked"), a 75% failure rate. On a kit whose whole premise is a shared brain that MANY AGENTS
+  // write to, SQLite's default answer to contention is exactly the wrong one — give up at once —
+  // and a write that gives up is a note that never existed.
+  //
+  // AND busy_timeout DOES NOT SAVE THE OPEN ITSELF. `PRAGMA journal_mode = WAL` needs a brief
+  // exclusive lock, and SQLite answers SQLITE_BUSY for it IMMEDIATELY instead of invoking the busy
+  // handler — so the timeout that protects every later write does nothing for the one call that
+  // sets it up. Four agents starting on a fresh vault lost a write EVERY round, always the first
+  // one. So the open retries too.
+  //
+  // And the schema must go up ATOMICALLY: two processes opening a fresh vault at the same instant
+  // raced here, one creating the file while the other opened it BEFORE the tables existed and then
+  // failed every call with `no such table: notes` — not a lock error, just a store that does not
+  // work. BEGIN IMMEDIATE takes the write lock up front; CREATE TABLE IF NOT EXISTS makes the loser
+  // a no-op.
+  for (let attempt = 0; ; attempt++) {
+    let db;
+    try {
+      db = new DatabaseSync(DB_PATH);
+      db.exec('PRAGMA busy_timeout = 5000;');
+      db.exec('PRAGMA journal_mode = WAL;');
+      db.exec('BEGIN IMMEDIATE;');
+      db.exec(SCHEMA);
+      db.exec('COMMIT;');
+      _db = db;
+      return _db;
+    } catch (e) {
+      try { db?.close(); } catch { /* already gone */ }
+      // Only a lock is worth retrying. Anything else is a real error and must not be swallowed —
+      // a retry loop that hides a genuine fault is worse than the fault.
+      if (attempt >= 40 || !/lock|busy/i.test(e.message)) throw e;
+      sleepSync(25);
+    }
+  }
 }
 
 /** A write is a statement of intent, so it may bring the store into being. */

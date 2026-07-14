@@ -808,3 +808,47 @@ test('cortex_read has a CEILING — the truncation was always there, disarmed by
   assert.equal(small.truncated, false, 'a normal note is not truncated');
   assert.ok(!/truncated at/.test(small.body), 'and carries no truncation notice');
 });
+
+test('CONCURRENT WRITERS do not lose notes — the whole point of a SHARED brain', async () => {
+  // WAL lets readers and ONE writer coexist; it does nothing for two writers. Without busy_timeout
+  // the second writer does not wait for the lock — it fails INSTANTLY with SQLITE_BUSY. Two agents
+  // writing one vault lost 45 of 60 notes (a 75% failure rate), and on a FRESH vault they raced the
+  // schema itself and every call died with `no such table: notes`.
+  //
+  // This has to spawn real PROCESSES: an in-process test shares one connection and can never see it.
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join: pjoin } = await import('node:path');
+
+  const dir = mkdtempSync(pjoin(tmpdir(), 'cortex-conc-'));
+  const vault = pjoin(dir, 'vault');
+  const script = pjoin(dir, 'w.mjs');
+  const core = pathToCore();
+  writeFileSync(script, `
+    const m = await import(${JSON.stringify(core)});
+    const tag = process.argv[2];
+    for (let i = 0; i < 12; i++) m.write(tag + '-' + i, { body: 'concurrent write' });
+  `);
+
+  try {
+    // Four agents, one FRESH vault, all starting at the same instant — the worst case.
+    const kids = ['A', 'B', 'C', 'D'].map((tag) =>
+      new Promise((res, rej) => {
+        import('node:child_process').then(({ execFile }) => {
+          execFile(process.execPath, [script, tag], { env: { ...process.env, CORTEX_VAULT: vault } },
+            (err) => (err ? rej(err) : res()));
+        });
+      }));
+    await Promise.all(kids);   // a writer that THREW is a lost note — the test must not tolerate it
+
+    const out = execFileSync(process.execPath,
+      ['-e', `import(${JSON.stringify(core)}).then(m => console.log(m.stats().notes))`],
+      { env: { ...process.env, CORTEX_VAULT: vault }, encoding: 'utf8' });
+    assert.equal(+out.trim(), 48, '4 agents × 12 notes = 48, and NOT ONE of them may be lost');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+function pathToCore() {
+  return new URL('../src/core.js', import.meta.url).href;
+}
