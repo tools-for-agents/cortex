@@ -95,6 +95,12 @@ const CANARIES = [
     find: '  withWriteLock(() => {\n    run(`INSERT INTO notes (slug,title,path,type,tags,aliases,created,updated,mtime,body)',
     into: '  ((f) => f())(() => {\n    run(`INSERT INTO notes (slug,title,path,type,tags,aliases,created,updated,mtime,body)',
   },
+  {
+    why: 'a note file must never be TORN — writeFileSync truncates first, so a reader (Obsidian, another agent, sync()) can catch a half-written note and index it as truth',
+    file: 'src/core.js',
+    find: '    writeFileSync(tmp, text);\n    renameSync(tmp, abs);',
+    into: '    writeFileSync(abs, text); void tmp;',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

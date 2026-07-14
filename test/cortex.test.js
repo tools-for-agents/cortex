@@ -974,6 +974,68 @@ test('a SYNC must not make a note VANISH while it is being reindexed', async () 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a note file is never TORN — the markdown IS the truth, and it must never be half-written', async () => {
+  // writeFileSync opens with O_TRUNC: the file is emptied, then refilled. Anyone reading it in between
+  // gets a partial note — neither the old one nor the new one. Measured: a reader watching one note
+  // while another agent rewrote it saw a TORN file 4 times in 1,626 reads.
+  //
+  // Not a crash-only hazard, which is why it matters: a cortex vault is OBSIDIAN-COMPATIBLE and the
+  // markdown IS the source of truth. Obsidian reads these files, other agents read them, and sync()
+  // reads them and INDEXES WHAT IT FINDS — so a sync landing in the window indexes a half-written note
+  // and overwrites the good body with a truncated one. The corruption outlives the write.
+  const { execFile } = await import('node:child_process');
+  const { mkdtempSync, rmSync, writeFileSync: wf, readdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join: pjoin } = await import('node:path');
+
+  const dir = mkdtempSync(pjoin(tmpdir(), 'cortex-torn-'));
+  const v = pjoin(dir, 'vault');
+  const core = new URL('../src/core.js', import.meta.url).href;
+  const env = { ...process.env, CORTEX_VAULT: v };
+
+  const writer = pjoin(dir, 'w.mjs');
+  const NL = String.fromCharCode(10);
+  wf(writer, [
+    `const m = await import(${JSON.stringify(core)});`,
+    `const NL = String.fromCharCode(10);`,
+    `const big = ('IMPORTANT CONTENT LINE' + NL).repeat(200000);`,   // ~4.5MB: a window wide enough to hit
+    `for (let i = 0; i < 40; i++) m.write('Torn Note', { body: big + NL + 'revision ' + i });`,
+  ].join(NL));
+  const watcher = pjoin(dir, 'r.mjs');
+  wf(watcher, [
+    `import fs from 'node:fs';`,
+    `const p = ${JSON.stringify(pjoin(v, 'notes', 'torn-note.md'))};`,
+    `const done = /revision [0-9]+\\s*$/;`,   // every COMPLETE state ends in a revision marker…
+    `let torn = 0;`,
+    `const t0 = Date.now();`,
+    `while (Date.now() - t0 < 2500) {`,
+    `  let s; try { s = fs.readFileSync(p, 'utf8'); } catch { continue; }`,
+    `  // …or is the untouched seed. Anything else is a HALF-WRITTEN note.`,
+    `  if (s.length && !done.test(s.trim()) && s.indexOf('SEED CONTENT') === -1) torn++;`,
+    `}`,
+    `console.log(torn);`,
+  ].join(NL));
+
+  const run = (sc) => new Promise((res, rej) =>
+    execFile(process.execPath, [sc], { env, encoding: 'utf8' },
+      (e, out, err) => (e ? rej(new Error(`${sc}: ${err || e.message}`.slice(0, 200))) : res(out))));
+
+  try {
+    wf(pjoin(dir, 'seed.mjs'), `
+      const m = await import(${JSON.stringify(core)});
+      m.write('Torn Note', { body: 'SEED CONTENT' });
+    `);
+    await run(pjoin(dir, 'seed.mjs'));
+
+    const [, torn] = await Promise.all([run(writer), run(watcher)]);   // rewrite WHILE reading
+    assert.equal(+torn.trim(), 0, `a reader must NEVER see a half-written note — saw ${torn.trim()} torn reads`);
+
+    // And the atomic swap must not litter: no scratch files left in the vault.
+    const stray = readdirSync(pjoin(v, 'notes')).filter((f) => /\.tmp$/.test(f));
+    assert.deepEqual(stray, [], 'the temp file is renamed away, never left behind');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 function pathToCore() {
   return new URL('../src/core.js', import.meta.url).href;
 }

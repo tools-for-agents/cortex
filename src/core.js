@@ -3,7 +3,7 @@
 // gives FTS search and a [[wikilink]] knowledge graph with backlinks. An agent
 // distils what it learns into interconnected notes and pulls just-enough context
 // back out — a durable memory that a human can also open in Obsidian.
-import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { join, dirname, relative, basename } from 'node:path';
 import { writeDb, get, all, run, VAULT, storeExists, withWriteLock } from './db.js';
 import { slugify, parseFrontmatter, serializeFrontmatter, parseLinks, parseTags, estTokens } from './notes.js';
@@ -199,6 +199,32 @@ function requireSlug(q) {
 }
 
 // ── write / update a note ──────────────────────────────────────────────────────
+// ── THE FILE IS THE SOURCE OF TRUTH, AND FOR A MOMENT IT WAS A LIE ────────────
+//
+// `writeFileSync` opens with O_TRUNC: the file is emptied, then refilled. Anyone reading it in
+// between gets a TORN note — neither the old one nor the new one. Measured: a reader watching one
+// note while another agent rewrote it saw a partial file 4 times in 1,626 reads.
+//
+// That is not a crash-only hazard, which is why it matters. A cortex vault is OBSIDIAN-COMPATIBLE and
+// the markdown IS the truth: Obsidian reads these files, other agents read them, and `sync()` reads
+// them and INDEXES WHAT IT FINDS — so a sync that lands in the window indexes a half-written note and
+// overwrites the good body with a truncated one. The corruption then outlives the write.
+//
+// rename() is atomic on POSIX. Write the new text beside the note, then swap it in: a reader sees the
+// OLD file or the NEW file, and never anything in between. Same principle as the DB transactions —
+// never expose an intermediate state — applied to the half of cortex that is not a database.
+// The temp file is in the SAME directory, because rename() is only atomic within a filesystem.
+function writeAtomic(abs, text) {
+  const tmp = `${abs}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, text);
+    renameSync(tmp, abs);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch { /* never leave the scratch file behind */ }
+    throw e;
+  }
+}
+
 // The read (`existing`) and the write MUST be one critical section: without it, two agents appending
 // to the same note both read the old body and the second silently overwrites the first. See
 // withWriteLock in db.js — 4 agents lost 27 of 40 lines, and every call said it worked.
@@ -227,7 +253,7 @@ function writeLocked(title, { body = '', type, tags, aliases, append = false } =
 
   const text = `${serializeFrontmatter(fm)}\n\n${newBody.trim()}\n`;
   mkdirSync(dirname(abs), { recursive: true });
-  writeFileSync(abs, text);
+  writeAtomic(abs, text);
   const actual = slugForPath(rel);
   putNote(rel, text, Math.floor(statSync(abs).mtimeMs), actual);
   // Writing a file whose NAME IS ALREADY TAKEN makes the other note ambiguous too — and it
