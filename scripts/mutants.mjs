@@ -101,6 +101,12 @@ const CANARIES = [
     find: '    writeFileSync(tmp, text);\n    renameSync(tmp, abs);',
     into: '    writeFileSync(abs, text); void tmp;',
   },
+  {
+    why: 'an UNREADABLE index is not an empty vault — without this the CLI printed "undefined hits" and an agent read it as NO HITS',
+    file: 'src/cli.js',
+    find: '    if (r.error) {',
+    into: '    if (false) {',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

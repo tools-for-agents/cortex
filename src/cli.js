@@ -42,6 +42,17 @@ try {
   } else if (cmd === 'search') {
     const r = cx.search(arg() || '', { k: +flag('-k', 8), max_tokens: +flag('--tokens', 1800),
       tag: flag('--tag'), type: flag('--type') });
+    // 🔑 THE CORE WAS HONEST AND THE CLI THREW THE HONESTY AWAY. search() returns { error } when the
+    // index cannot be read (a corrupt file, a drifted schema) — and this printed
+    // "— undefined hits, ~undefined tokens —" and said nothing. An agent reads that as NO HITS, which
+    // is the confident wrong answer in its purest form: the tool KNEW it had failed and did not say so.
+    if (r.error) {
+      console.error(`cortex could not search the index — ${r.error}\n`
+        + `  This is NOT "your vault does not contain that". The index is unreadable, so NOTHING was\n`
+        + `  searched. Rebuild it:  cortex sync --reindex   (the markdown in ${cx.VAULT} is the truth,\n`
+        + `  so the index can always be rebuilt from it — nothing is lost.)`);
+      process.exit(1);
+    }
     for (const x of r.results) out(`\n▸ ${x.title}  [${x.type}]  (${x.slug})  score=${x.score}\n  ${x.excerpt}`);
     // Say the size of the haystack. "0 hits" and "0 hits out of 0 notes" mean opposite
     // things, and only one of them tells you the vault path is wrong.

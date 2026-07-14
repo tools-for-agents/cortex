@@ -1050,6 +1050,39 @@ test('a note file is never TORN — the markdown IS the truth, and it must never
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('an UNREADABLE index is not an empty vault — the CLI must not print "undefined hits"', async () => {
+  // The core was HONEST: search() returns { error } when the index cannot be read. The CLI threw that
+  // honesty away — it printed "— undefined hits, ~undefined tokens —" and nothing else. An agent reads
+  // that as NO HITS. The tool KNEW it had failed and did not say so, which is the confident wrong
+  // answer in its purest form. (lens's CLI already got this right; cortex's and scout's did not.)
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, rmSync, writeFileSync: wf, mkdirSync: mkd } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join: pjoin } = await import('node:path');
+  const { randomBytes } = await import('node:crypto');
+
+  const v = mkdtempSync(pjoin(tmpdir(), 'cortex-corrupt-'));
+  mkd(pjoin(v, '.cortex'), { recursive: true });
+  wf(pjoin(v, '.cortex', 'index.db'), randomBytes(4096));      // a file that is NOT a database
+  const cli = new URL('../src/cli.js', import.meta.url).pathname;
+
+  try {
+    let out = '', code = 0;
+    try {
+      execFileSync(process.execPath, [cli, 'search', 'anything'],
+        { env: { ...process.env, CORTEX_VAULT: v }, encoding: 'utf8', stdio: 'pipe' });
+    } catch (e) {
+      code = e.status;
+      out = `${e.stdout || ''}${e.stderr || ''}`;
+    }
+    assert.notEqual(code, 0, 'an unreadable index must FAIL, not succeed with nothing');
+    assert.doesNotMatch(out, /undefined hits/, 'never "undefined hits" — that reads as "no hits"');
+    assert.match(out, /could not search/i, 'it says it could not search');
+    assert.match(out, /NOT "your vault does not contain that"/, 'and that this is not an empty result');
+    assert.match(out, /sync --reindex/, 'and how to rebuild it — the markdown is the truth, so nothing is lost');
+  } finally { rmSync(v, { recursive: true, force: true }); }
+});
+
 function pathToCore() {
   return new URL('../src/core.js', import.meta.url).href;
 }
