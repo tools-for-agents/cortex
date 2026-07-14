@@ -89,6 +89,12 @@ const CANARIES = [
     find: '  if (_depth++ === 0) d.exec(\'BEGIN IMMEDIATE;\');',
     into: '  if (false) d.exec(\'BEGIN IMMEDIATE;\');',
   },
+  {
+    why: 'a SYNC must not make a note VANISH — putNote outside a transaction lets a search see the note with NO FTS row, and cortex says it is not in your brain',
+    file: 'src/core.js',
+    find: '  withWriteLock(() => {\n    run(`INSERT INTO notes (slug,title,path,type,tags,aliases,created,updated,mtime,body)',
+    into: '  ((f) => f())(() => {\n    run(`INSERT INTO notes (slug,title,path,type,tags,aliases,created,updated,mtime,body)',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

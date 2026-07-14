@@ -101,21 +101,31 @@ function putNote(rel, text, mtime, slug = slugForPath(rel)) {
   const aliases = asArray(data.aliases);
   const created = data.created || nowISO();
   const updated = data.updated || created;
-  run(`INSERT INTO notes (slug,title,path,type,tags,aliases,created,updated,mtime,body)
-       VALUES (?,?,?,?,?,?,?,?,?,?)
-       ON CONFLICT(slug) DO UPDATE SET title=excluded.title, path=excluded.path, type=excluded.type,
-         tags=excluded.tags, aliases=excluded.aliases, created=excluded.created,
-         updated=excluded.updated, mtime=excluded.mtime, body=excluded.body`,
-    slug, title, rel, type, JSON.stringify(tags), JSON.stringify(aliases), created, updated, mtime, body);
-  run('DELETE FROM notes_fts WHERE slug=?', slug);
-  run('INSERT INTO notes_fts (slug,title,tags,body) VALUES (?,?,?,?)', slug, title, tags.join(' '), body);
+  // The row and its FTS entry must land TOGETHER. Apart, the DELETE and the INSERT are two
+  // transactions, and a search landing between them sees this note with NO FTS row — cortex answers
+  // "that is not in your second brain" about a note that is right there. write() already holds the
+  // lock; sync() does NOT, and sync() re-puts every note in the vault. (withWriteLock is reentrant.)
+  withWriteLock(() => {
+    run(`INSERT INTO notes (slug,title,path,type,tags,aliases,created,updated,mtime,body)
+         VALUES (?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(slug) DO UPDATE SET title=excluded.title, path=excluded.path, type=excluded.type,
+           tags=excluded.tags, aliases=excluded.aliases, created=excluded.created,
+           updated=excluded.updated, mtime=excluded.mtime, body=excluded.body`,
+      slug, title, rel, type, JSON.stringify(tags), JSON.stringify(aliases), created, updated, mtime, body);
+    run('DELETE FROM notes_fts WHERE slug=?', slug);
+    run('INSERT INTO notes_fts (slug,title,tags,body) VALUES (?,?,?,?)', slug, title, tags.join(' '), body);
+  });
   return slug;
 }
 
 function deleteNote(slug) {
-  run('DELETE FROM notes WHERE slug=?', slug);
-  run('DELETE FROM notes_fts WHERE slug=?', slug);
-  run('DELETE FROM links WHERE src=? OR dst=?', slug, slug);
+  // Three DELETEs, one transaction: a reader must never catch a note that exists in one table and
+  // not the others — half-deleted is a state no caller can make sense of.
+  withWriteLock(() => {
+    run('DELETE FROM notes WHERE slug=?', slug);
+    run('DELETE FROM notes_fts WHERE slug=?', slug);
+    run('DELETE FROM links WHERE src=? OR dst=?', slug, slug);
+  });
 }
 
 // ── (re)build the whole link graph from indexed note bodies ────────────────────

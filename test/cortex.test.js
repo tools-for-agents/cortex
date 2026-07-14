@@ -930,6 +930,50 @@ test('busy_timeout carries the writes that are NOT inside the lock — sync() is
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a SYNC must not make a note VANISH while it is being reindexed', async () => {
+  // putNote upserts the note row and then DELETEs + INSERTs its FTS entry. Apart, those are separate
+  // transactions, and a search landing between them sees the note with NO FTS row — cortex answers
+  // "that is not in your second brain" about a note that is right there. write() holds the lock;
+  // sync() does NOT, and sync() re-puts EVERY note in the vault. Measured: 18,173 searches during a
+  // concurrent sync, fewest notes ever visible 29 of 30 — never zero, so nothing ever looked broken.
+  const { execFile, execFileSync } = await import('node:child_process');
+  const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join: pjoin } = await import('node:path');
+
+  const dir = mkdtempSync(pjoin(tmpdir(), 'cortex-sync-race-'));
+  const v = pjoin(dir, 'vault');
+  const core = new URL('../src/core.js', import.meta.url).href;
+  const env = { ...process.env, CORTEX_VAULT: v };
+  const N = 15;
+
+  const syncer = pjoin(dir, 'sync.mjs');
+  writeFileSync(syncer, `
+    const m = await import(${JSON.stringify(core)});
+    for (let i = 0; i < 8; i++) m.sync({ reindex: true });
+  `);
+  const seek = pjoin(dir, 'seek.mjs');
+  writeFileSync(seek, `
+    const m = await import(${JSON.stringify(core)});
+    let min = 1e9;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 2500) { const r = m.search('zzsyncrace', { k: 50 }); if (r.matched < min) min = r.matched; }
+    console.log(min);
+  `);
+
+  const run = (s) => new Promise((res, rej) =>
+    execFile(process.execPath, [s], { env, encoding: 'utf8' }, (e, out) => (e ? rej(e) : res(out))));
+
+  try {
+    execFileSync(process.execPath,
+      ['-e', `import(${JSON.stringify(core)}).then(m => { for (let i = 0; i < ${N}; i++) m.write('n' + i, { body: 'holds zzsyncrace here' }); })`],
+      { env });
+    const [, seen] = await Promise.all([run(syncer), run(seek)]);   // sync WHILE searching
+    assert.equal(+seen.trim(), N,
+      `every search during a sync must see all ${N} notes — the fewest seen was ${seen.trim()}`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 function pathToCore() {
   return new URL('../src/core.js', import.meta.url).href;
 }
