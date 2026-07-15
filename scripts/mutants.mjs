@@ -36,6 +36,12 @@ const CANARIES = [
     into: '  if (false) {',
   },
   {
+    why: 'a mistyped --type ("conept") is a MISTAKE, not an empty result — without this it silently returns "0 hits of N notes" and reads as "no such notes match"',
+    file: 'src/core.js',
+    find: '    if (!known.has(type)) {',
+    into: '    if (false) {',
+  },
+  {
     why: 'two notes with the same filename must BOTH survive — one of them used to vanish',
     file: 'src/core.js',
     find: '    for (const rel of list) m.set(rel, list.length === 1 ? b : pathSlug(rel));',

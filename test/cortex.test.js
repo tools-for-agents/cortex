@@ -64,6 +64,26 @@ test('search owns up to what the budget/k hid — it never looks complete when i
   assert.equal(roomy.limited_by, null, 'and it does not cry wolf — limited_by is null');
 });
 
+// A `type` filter names a finite, known set. A typo ('conept') is a MISTAKE, not a search with no
+// results — silently returning "0 hits of N notes" reads as "no such notes match". Same class as
+// agent-hq's column typos and recall's mistyped sources.
+test('a mistyped --type is a named error, not a silent empty result', () => {
+  cx.write('A Concept', { type: 'concept', body: 'about zztypeprobe things' });
+  cx.write('Standup', { type: 'meeting', body: 'a zztypeprobe custom-type note' });   // a CUSTOM type
+
+  assert.throws(() => cx.search('zztypeprobe', { type: 'conept' }),
+    (e) => {
+      assert.match(e.message, /no note type "conept"/i, 'it names the bad type');
+      assert.match(e.message, /concept/, 'and lists the built-in types that DO exist');
+      assert.match(e.message, /meeting/, 'and the custom types actually in the vault');
+      return true;
+    });
+  // Over-fire guards: a valid built-in type, a valid custom type, and a valid-but-empty type all work.
+  assert.ok(cx.search('zztypeprobe', { type: 'concept' }).results.length >= 1, 'a real built-in type filters');
+  assert.ok(cx.search('zztypeprobe', { type: 'meeting' }).results.length >= 1, 'a real custom type filters');
+  assert.doesNotThrow(() => cx.search('zztypeprobe', { type: 'person' }), 'a valid type with no matches is an empty result, not an error');
+});
+
 test('ONE huge note must not hang every search that touches it', () => {
   // SQLite's snippet() is superlinear in document size: 3ms at 16KB, 792ms at 256KB, and 142
   // SECONDS on a 4MB note — while the MATCH that found the row costs 1ms. So a single oversized

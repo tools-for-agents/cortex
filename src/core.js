@@ -380,6 +380,18 @@ function bigExcerpt(slug, query) {
 
 export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
   const searched = { notes: corpus(), vault: VAULT };
+  // A `type` filter names a FINITE, KNOWN set — the built-in types plus whatever custom folders the
+  // vault actually holds. A name outside it ("conept" for "concept") is not a search with no results,
+  // it is a MISTAKE, and returning "0 hits of 17 notes" reads as "no concept notes match" when the
+  // truth is the filter never matched anything. Say so, and list the real types. (Same class as
+  // agent-hq's column typos and recall's mistyped sources.) An EMPTY-but-valid type still returns [].
+  if (type) {
+    const known = new Set([...Object.keys(TYPE_DIR), ...all('SELECT DISTINCT type FROM notes').map((r) => r.type).filter(Boolean)]);
+    if (!known.has(type)) {
+      throw new Error(`no note type "${type}" — cortex has: ${[...known].sort().join(', ')}. `
+        + 'Check the spelling, or drop the type filter to search them all.');
+    }
+  }
   const m = ftsQuery(query);
   if (!m) return { query, searched, count: 0, tokens: 0, results: [] };
   let sql = `SELECT n.slug, n.title, n.type, n.tags, length(notes_fts.body) AS chars,
