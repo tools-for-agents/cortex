@@ -1172,6 +1172,27 @@ test('a note type is a folder name, not a path — no writing OUTSIDE the vault'
   } finally { try { rmSync(escaped, { force: true }); } catch { /* never created, ideally */ } }
 });
 
+test('a note type that is an Object.prototype name is a custom folder, not a crash', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const { join: pjoin } = await import('node:path');
+  // dirForType (WRITE): did `TYPE_DIR[t] || t`, and bracket access WALKS THE PROTOTYPE — so a type of
+  // "constructor" / "toString" / "valueOf" resolved to that inherited FUNCTION, and join(fn, …) threw a raw
+  // "path must be a string". These are valid custom folder names.
+  for (const ty of ['constructor', 'toString', 'valueOf', 'hasOwnProperty']) {
+    const r = cx.write(`Proto ${ty}`, { type: ty, body: 'x' });
+    assert.equal(r.path, `${ty}/proto-${ty.toLowerCase()}.md`, `type "${ty}" lands in a folder named for it`);
+  }
+  // typeFromDir (READ): a note file with NO frontmatter type derives its type from the FOLDER — `putNote`
+  // only calls typeFromDir when `data.type` is absent, so this needs a raw file, not cx.write. `REV[dir]`
+  // must not walk the prototype and hand back a function as the note's type.
+  mkdirSync(pjoin(vault, 'constructor'), { recursive: true });
+  writeFileSync(pjoin(vault, 'constructor', 'derived-proto.md'), '# Derived Proto\n\nno frontmatter type here\n');
+  cx.sync();
+  const derived = cx.read('derived-proto');
+  assert.equal(derived.type, 'constructor', 'a folder-derived type is the folder string, not an inherited function');
+  assert.equal(typeof derived.type, 'string');
+});
+
 // A dot-folder type stays INSIDE the vault, so the traversal guard lets it pass — but the vault WALK
 // skips dot-dirs, so the note is indexed at write time and PRUNED by the next sync: it vanishes from
 // the brain while the file sits on disk, and cortex then reports "the vault is empty". Refuse it up front.

@@ -149,6 +149,18 @@ const CANARIES = [
     find: '  // is. Coerce to a positive int, else the default.\n  stub_chars = Number.isFinite(+stub_chars) && +stub_chars > 0 ? Math.floor(+stub_chars) : 120;',
     into: '  // is. Coerce to a positive int, else the default.\n  void stub_chars;',
   },
+  {
+    why: 'dirForType resolves a type by OWN-property lookup, not `TYPE_DIR[t]` — bracket access walks the prototype, so a custom type "constructor"/"toString"/"valueOf" resolved to that inherited FUNCTION and join(fn, …) threw a raw "path must be a string" on write',
+    file: 'src/core.js',
+    find: 'const dirForType = (t) => (Object.hasOwn(TYPE_DIR, t) ? TYPE_DIR[t] : t);',
+    into: 'const dirForType = (t) => TYPE_DIR[t] || t;',
+  },
+  {
+    why: 'typeFromDir reverses a folder to a type by OWN-property lookup — `REV[d]` walks the prototype, so a note in a "constructor"/"toString" folder read back its TYPE as an inherited function instead of the string',
+    file: 'src/core.js',
+    find: 'return d ? (Object.hasOwn(REV, d) ? REV[d] : d) : null;',
+    into: 'return d ? (REV[d] || d) : null;',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

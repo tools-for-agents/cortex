@@ -14,8 +14,13 @@ export { VAULT };
 const TYPE_DIR = { note: 'notes', concept: 'concepts', entity: 'entities', source: 'sources',
   synthesis: 'synthesis', person: 'people', project: 'projects', daily: 'daily', area: 'areas', moc: 'maps' };
 const REV = Object.fromEntries(Object.entries(TYPE_DIR).map(([k, v]) => [v, k]));
-const dirForType = (t) => TYPE_DIR[t] || t;
-const typeFromDir = (rel) => { const d = rel.includes('/') ? rel.split('/')[0] : null; return d ? (REV[d] || d) : null; };
+// Object.hasOwn, NOT `TYPE_DIR[t] || t`: bracket access WALKS THE PROTOTYPE, so a custom type whose name is
+// an Object.prototype member — `constructor`, `toString`, `valueOf`, `hasOwnProperty` — resolved to that
+// inherited FUNCTION instead of falling through to `t`. `join(function, …)` then threw a raw "path must be a
+// string" (write), and REV[dir] returned a function as a note's TYPE (read). `constructor` is a valid custom
+// folder name, exactly like `custom-thing`; treat it as one, not as a crash.
+const dirForType = (t) => (Object.hasOwn(TYPE_DIR, t) ? TYPE_DIR[t] : t);
+const typeFromDir = (rel) => { const d = rel.includes('/') ? rel.split('/')[0] : null; return d ? (Object.hasOwn(REV, d) ? REV[d] : d) : null; };
 
 const nowISO = () => new Date().toISOString();
 // A daily note is a LOCAL calendar-day idea: "what did I do today" means the user's today, in
