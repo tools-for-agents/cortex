@@ -1345,8 +1345,8 @@ async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
   wireRows();
   try{const note=await (await fetch("/api/note?slug="+encodeURIComponent(id))).json();
     if(selected!==n)return;
-    const bodyEl=document.getElementById("noteBody");if(bodyEl){bodyEl.innerHTML=renderBody(note.body||"");bodyEl.querySelectorAll("[data-go]").forEach(a=>a.addEventListener("click",()=>openNote(a.dataset.go)));}
-    const ch=document.getElementById("chips");if(ch&&note.tags&&note.tags.length)note.tags.forEach(t=>{const s=document.createElement("span");s.className="chip tag";s.textContent="#"+t;s.style.cursor="pointer";s.title="Filter the graph by #"+t;s.addEventListener("click",()=>setTagFilter(t));ch.appendChild(s);});
+    const bodyEl=document.getElementById("noteBody");if(bodyEl){bodyEl.innerHTML=renderBody(note.body||"");bodyEl.querySelectorAll("[data-go]").forEach(a=>{a.setAttribute("role","button");a.setAttribute("tabindex","0");const go=()=>openNote(a.dataset.go);a.addEventListener("click",go);a.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});});}   // .wl links: keyboard-reachable, like wireRows
+    const ch=document.getElementById("chips");if(ch&&note.tags&&note.tags.length)note.tags.forEach(t=>{const s=document.createElement("span");s.className="chip tag";s.textContent="#"+t;s.style.cursor="pointer";s.setAttribute("role","button");s.setAttribute("tabindex","0");s.setAttribute("aria-label","Filter the graph by #"+t);s.title="Filter the graph by #"+t;const go=()=>setTagFilter(t);s.addEventListener("click",go);s.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});ch.appendChild(s);});   // tag chip: keyboard-reachable, like the overview tagpill
   }catch(e){const b=document.getElementById("noteBody");if(b)b.textContent="(could not load note)";}}   // click to navigate + hover a row to cross-highlight the node in the graph
 function goBack(){const prev=navStack.pop();if(prev)openNote(prev,{back:true});}
 function closePanel(){panel.classList.remove("open");selected=null;navStack=[];exitFocus();}
