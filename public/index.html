@@ -1299,8 +1299,15 @@ function exportPNG(){markUsed();hovered=null;
 
 // ── note reader ───────────────────────────────────────────────────────────────
 const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+// ONE reading of a [[wikilink]], shared by the note body AND the search snippet so the two can
+// never drift: the TARGET is everything before the first pipe with any #heading trimmed (exactly
+// as the server's parseLinks does, so [[Note#sec]] resolves to Note instead of rendering broken);
+// the display LABEL is everything AFTER the first pipe, verbatim — so [[a|b|c]] reads "b|c", not
+// "b". Two renderers that answered [[a|b|c]] differently is how you ship a link that shows one
+// thing in the panel and another in search, and silently drops the text after the second pipe.
+function wikiParts(inner){const p=inner.indexOf("|");const head=p<0?inner:inner.slice(0,p);return {target:head.split("#")[0].trim(),label:(p<0?head:inner.slice(p+1)).trim()};}
 function renderBody(t){t=t||"";return t.split(/\n{2,}/).map(p=>"<p>"+esc(p)
-  .replace(/\[\[([^\]]+)\]\]/g,(m,inner)=>{const parts=inner.split("|"),id=resolver.get(slug(parts[0].trim())),label=(parts[1]||parts[0]).trim();return id?`<span class="wl" data-go="${id}">${esc(label)}</span>`:`<span class="wl broken">${esc(label)}</span>`;})
+  .replace(/\[\[([^\]]+)\]\]/g,(m,inner)=>{const w=wikiParts(inner),id=resolver.get(slug(w.target));return id?`<span class="wl" data-go="${id}">${esc(w.label)}</span>`:`<span class="wl broken">${esc(w.label)}</span>`;})
   .replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\n/g,"<br>")+"</p>").join("");}
 const panel=document.getElementById("panel");
 let navStack=[];
@@ -1403,7 +1410,7 @@ async function runSearch(){const v=q.value.trim();
   // complete makes the reader believe the vault holds only these (the Cycle-75 lie, on the browser).
   lastWithheld=r.withheld||0;lastMatched=r.matched||matches.length;
   selIdx=matches.length?0:-1;drawResults(v);hovered=matches[0]?matches[0].node:null;}
-function snippet(n,v){const b=n.body.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,(m,a,al)=>al||a);const i=b.toLowerCase().indexOf(v);if(i<0)return b.slice(0,60);return (i>14?"…":"")+b.slice(Math.max(0,i-12),i+48);}
+function snippet(n,v){const b=n.body.replace(/\[\[([^\]]+)\]\]/g,(m,inner)=>wikiParts(inner).label);const i=b.toLowerCase().indexOf(v);if(i<0)return b.slice(0,60);return (i>14?"…":"")+b.slice(Math.max(0,i-12),i+48);}
 function drawResults(v){if(!matches.length){results.innerHTML=`<div class="empty">no notes match “${esc(v)}”</div>`;results.classList.add("on");return;}
   results.innerHTML=matches.map((x,i)=>{const c=colorOf(x.node);return `<div class="r ${i===selIdx?"sel":""}" data-i="${i}"><span class="d" style="color:${c};background:${c}"></span><div class="tx"><div class="tt">${esc(x.title)}</div><div class="sn">${esc(x.excerpt)}</div></div><span class="ty">${(TYPE[x.type]||{label:x.type}).label}</span></div>`;}).join("")
     +(lastWithheld>0?`<div class="r-more">showing ${matches.length} of ${lastMatched} — ${lastWithheld} more match${lastWithheld===1?"es":""}; refine to narrow</div>`:"");
