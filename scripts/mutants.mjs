@@ -137,6 +137,12 @@ const CANARIES = [
     find: '  stale_days = Number.isFinite(+stale_days) && +stale_days > 0 ? Math.min(Math.floor(+stale_days), MAX_STALE_DAYS) : 0;',
     into: '  void stale_days;',
   },
+  {
+    why: 'triage counts the WHOLE backlog (needing), not just the shown page — without the tally, "12 to weave" reads as the entire maintenance job when 47 notes still need it, and an agent stops early',
+    file: 'src/core.js',
+    find: '    needing++;',
+    into: '    void 0;',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

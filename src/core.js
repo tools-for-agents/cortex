@@ -515,15 +515,17 @@ export function triage({ limit = 12, stub_chars = 120 } = {}) {
      AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)) AS orphan
     FROM notes ORDER BY updated DESC`);
 
+  let needing = 0;              // notes that ACTUALLY have an issue — the whole backlog, not the shown page
   const items = [];
   for (const r of rows) {
-    if (items.length >= limit) break;
     const tags = JSON.parse(r.tags || '[]');
     const issues = [];
     if (r.orphan) issues.push('orphan');          // nothing links to it, it links to nothing
     if (!tags.length) issues.push('untagged');
     if (r.chars < stub_chars) issues.push('stub');
     if (!issues.length) continue;                 // already woven in — not the inbox's problem
+    needing++;
+    if (items.length >= limit) continue;          // counted for the backlog; the expensive suggest() is page-only
 
     const { suggestions } = suggest(r.slug, { k: 4 });
     // Tags worth adopting: the ones already carried by the notes it resembles.
@@ -538,7 +540,9 @@ export function triage({ limit = 12, stub_chars = 120 } = {}) {
       suggested_tags: Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([tag, n]) => ({ tag, n })),
     });
   }
-  return { count: items.length, notes: rows.length, items };
+  // `count` is the page shown; `needing` is the whole backlog. Capping the page is fine — hiding how much is
+  // left is the silent truncation: "12 to weave" reads as done when 47 remain.
+  return { count: items.length, needing, truncated: needing > items.length, notes: rows.length, items };
 }
 
 // Weave a note in: adopt tags and link it to the notes it belongs with. Files are

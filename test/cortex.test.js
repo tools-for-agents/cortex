@@ -360,6 +360,21 @@ test('triage: the inbox finds captures nobody wove in, and weave fixes them', ()
   assert.ok(cx.triage({ limit: 'abc' }).items.length <= 12, 'a bad limit falls back');
 });
 
+test('triage reports the WHOLE backlog, not just the shown page', () => {
+  for (let i = 0; i < 6; i++) cx.write(`Triage Backlog ${i}`, { body: 'x' });   // each: orphan + untagged + stub
+  const full = cx.triage({ limit: 100 });
+  assert.ok(full.needing >= 6, 'needing counts every note that has an issue, across the whole vault');
+  assert.equal(full.truncated, false, 'a page that holds the whole backlog is not truncated');
+  assert.equal(full.needing, full.items.length, 'when nothing is cut, needing equals the items shown');
+  // Cap the page below the backlog: the page caps, but `needing` still reports the true total — otherwise
+  // "2 to weave" reads as done when the maintenance backlog is really 47.
+  const capped = cx.triage({ limit: 2 });
+  assert.equal(capped.items.length, 2, 'the page is capped to the limit');
+  assert.equal(capped.count, 2, 'count is the shown page');
+  assert.equal(capped.needing, full.needing, 'but needing is the WHOLE backlog, not the page');
+  assert.ok(capped.truncated, 'and it says the page was cut');
+});
+
 test('serve: POST /api/note writes a note — and writing a ghost heals the broken link', async () => {
   const server = createCortexServer();
   await new Promise((r) => server.listen(0, r));
