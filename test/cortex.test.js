@@ -388,6 +388,23 @@ test('triage: a bad stub_chars must not silently undercount the backlog', () => 
   assert.equal(nanN, defN, 'a NaN stub_chars behaves like the default threshold, not "no stubs"');
 });
 
+test('cortex: a tag named for an Object.prototype member is counted, not sized by a function', () => {
+  cx.write('Proto Tag A', { tags: ['constructor', 'plain'], body: 'x' });
+  cx.write('Proto Tag B', { tags: ['constructor'], body: 'y' });
+  // tags(): counts is a {} keyed by TAG names, so a tag "constructor" read the inherited Object function as
+  // its starting count and came back "function Object() {…}1".
+  const ctor = cx.tags().tags.find((e) => e.tag === 'constructor');
+  assert.equal(typeof ctor.count, 'number', 'the "constructor" tag count is a number, not function source');
+  assert.equal(ctor.count, 2, 'and it counts both notes');
+  // triage.suggested_tags uses the SAME counter, keyed by the tags of the notes a draft resembles.
+  cx.write('Quantum Ref', { tags: ['constructor'], body: 'quantum entanglement flux capacitor resonance cascade' });
+  cx.write('Quantum Draft', { tags: [], body: 'quantum entanglement flux capacitor resonance cascade notes' });
+  const it = cx.triage({ limit: 50 }).items.find((i) => i.slug === 'quantum-draft');
+  const sTag = it && it.suggested_tags.find((s) => s.tag === 'constructor');
+  assert.ok(sTag, 'the resembled note\'s "constructor" tag is suggested');
+  assert.equal(typeof sTag.n, 'number', 'and its suggested count is a number, not function source');
+});
+
 test('serve: POST /api/note writes a note — and writing a ghost heals the broken link', async () => {
   const server = createCortexServer();
   await new Promise((r) => server.listen(0, r));

@@ -538,8 +538,9 @@ export function triage({ limit = 12, stub_chars = 120 } = {}) {
     if (items.length >= limit) continue;          // counted for the backlog; the expensive suggest() is page-only
 
     const { suggestions } = suggest(r.slug, { k: 4 });
-    // Tags worth adopting: the ones already carried by the notes it resembles.
-    const counts = {};
+    // Tags worth adopting: the ones already carried by the notes it resembles. Object.create(null): keyed by
+    // TAG names, a plain {} would let a tag "constructor"/"toString" read the inherited function as its count.
+    const counts = Object.create(null);
     for (const sg of suggestions) {
       const row = get('SELECT tags FROM notes WHERE slug=?', sg.slug);
       for (const t of JSON.parse(row?.tags || '[]')) if (!tags.includes(t)) counts[t] = (counts[t] || 0) + 1;
@@ -616,7 +617,9 @@ export function lint({ stub_chars = 120, stale_days = 0 } = {}) {
 
 // ── tags ────────────────────────────────────────────────────────────────────
 export function tags() {
-  const counts = {};
+  // Object.create(null): counts is keyed by TAG names, so a tag literally named "constructor"/"toString"
+  // must not read the inherited function as its starting count and come back as "function Object() {…}1".
+  const counts = Object.create(null);
   for (const r of all('SELECT tags FROM notes'))
     for (const t of JSON.parse(r.tags || '[]')) counts[t] = (counts[t] || 0) + 1;
   return { total: Object.keys(counts).length,

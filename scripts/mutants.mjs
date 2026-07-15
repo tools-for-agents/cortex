@@ -161,6 +161,18 @@ const CANARIES = [
     find: 'return d ? (Object.hasOwn(REV, d) ? REV[d] : d) : null;',
     into: 'return d ? (REV[d] || d) : null;',
   },
+  {
+    why: 'tags() tallies by TAG name in a prototype-less map — a plain {} lets a tag "constructor"/"toString" read the inherited Object function as its count, so cortex_tags returns "function Object() {…}1" instead of a number',
+    file: 'src/core.js',
+    find: "  const counts = Object.create(null);\n  for (const r of all('SELECT tags FROM notes'))",
+    into: "  const counts = {};\n  for (const r of all('SELECT tags FROM notes'))",
+  },
+  {
+    why: "triage's suggested_tags tally is prototype-less too (same {} foot-gun, keyed by the tags of resembled notes) — a 'constructor' tag would come back sized by a function-source string",
+    file: 'src/core.js',
+    find: '    const counts = Object.create(null);\n    for (const sg of suggestions) {',
+    into: '    const counts = {};\n    for (const sg of suggestions) {',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,
