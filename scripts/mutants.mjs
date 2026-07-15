@@ -24,6 +24,12 @@ import { spawnSync } from 'node:child_process';
 
 const CANARIES = [
   {
+    why: 'a note TYPE is a folder name, not a path — without the containment check a crafted type ("../../x") writes a .md file OUTSIDE the vault, anywhere on disk',
+    file: 'src/core.js',
+    find: "  if (within === '' || within.startsWith('..') || isAbsolute(within)) {",
+    into: '  if (false) {',
+  },
+  {
     why: 'two notes with the same filename must BOTH survive — one of them used to vanish',
     file: 'src/core.js',
     find: '    for (const rel of list) m.set(rel, list.length === 1 ? b : pathSlug(rel));',

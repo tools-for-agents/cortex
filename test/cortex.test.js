@@ -1083,6 +1083,30 @@ test('an UNREADABLE index is not an empty vault — the CLI must not print "unde
   } finally { rmSync(v, { recursive: true, force: true }); }
 });
 
+// A note type ends up as a FOLDER NAME (dirForType passes unknown types through verbatim), and the
+// title is safely slugified — but the TYPE was not. A crafted type climbs out of the vault and writes
+// a .md file anywhere on disk. Reachable from `cortex write --type` and MCP `cortex_write {type}`.
+test('a note type is a folder name, not a path — no writing OUTSIDE the vault', async () => {
+  const { existsSync } = await import('node:fs');
+  const { join: pjoin } = await import('node:path');
+
+  // `../…` from <tmp>/cortex-test-XXX lands in <tmp> — writable, and OUTSIDE the vault.
+  const escapeType = '../cortex-traversal-probe-ZZ';
+  const escaped = pjoin(vault, escapeType, 'escapee.md');   // where it WOULD land, unguarded
+  try {
+    assert.throws(() => cx.write('escapee', { type: escapeType, body: 'arbitrary write' }),
+      /outside the vault|folder name, not a path/i,
+      'a type that climbs out of the vault must be REFUSED, not written');
+    assert.ok(!existsSync(escaped), 'and NOTHING was written outside the vault');
+
+    // Over-fire guard: a KNOWN type and a CLEAN CUSTOM type must both still work — the fix blocks
+    // traversal, not custom folders.
+    assert.equal(cx.write('Plain Concept', { type: 'concept', body: 'x' }).path, 'concepts/plain-concept.md');
+    assert.equal(cx.write('Team Sync', { type: 'meeting-notes', body: 'x' }).path, 'meeting-notes/team-sync.md',
+      'a clean custom type still creates its own folder');
+  } finally { try { rmSync(escaped, { force: true }); } catch { /* never created, ideally */ } }
+});
+
 function pathToCore() {
   return new URL('../src/core.js', import.meta.url).href;
 }

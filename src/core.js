@@ -4,7 +4,7 @@
 // distils what it learns into interconnected notes and pulls just-enough context
 // back out — a durable memory that a human can also open in Obsidian.
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
-import { join, dirname, relative, basename } from 'node:path';
+import { join, dirname, relative, basename, isAbsolute } from 'node:path';
 import { writeDb, get, all, run, VAULT, storeExists, withWriteLock } from './db.js';
 import { slugify, parseFrontmatter, serializeFrontmatter, parseLinks, parseTags, estTokens } from './notes.js';
 
@@ -237,6 +237,16 @@ function writeLocked(title, { body = '', type, tags, aliases, append = false } =
   const finalType = type || existing?.type || 'note';
   const rel = existing?.path || join(dirForType(finalType), `${slug}.md`);
   const abs = join(VAULT, rel);
+  // A note must land INSIDE the vault. `dirForType` passes an UNKNOWN type through verbatim as a
+  // folder name (custom types are a feature), so a crafted type like "../../etc" makes `rel` climb
+  // OUT of the vault and writes a .md file anywhere on disk — reachable from `cortex write --type`
+  // AND MCP `cortex_write {type}` (a free string in the schema). A type is a folder NAME, not a
+  // path: refuse anything that escapes, rather than silently writing outside the store.
+  const within = relative(VAULT, abs);
+  if (within === '' || within.startsWith('..') || isAbsolute(within)) {
+    throw new Error(`a note type is a folder name, not a path — "${finalType}" would write outside the vault. `
+      + `Use one of: ${Object.keys(TYPE_DIR).join(', ')}, or a plain custom name (no "/" or "..").`);
+  }
 
   let newBody = body;
   if (existing && append) newBody = (existing.body ? `${existing.body}\n\n` : '') + body;
