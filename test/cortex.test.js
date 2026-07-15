@@ -1107,6 +1107,21 @@ test('a note type is a folder name, not a path — no writing OUTSIDE the vault'
   } finally { try { rmSync(escaped, { force: true }); } catch { /* never created, ideally */ } }
 });
 
+// A dot-folder type stays INSIDE the vault, so the traversal guard lets it pass — but the vault WALK
+// skips dot-dirs, so the note is indexed at write time and PRUNED by the next sync: it vanishes from
+// the brain while the file sits on disk, and cortex then reports "the vault is empty". Refuse it up front.
+test('a note type cannot be a hidden dot-folder — the note would silently vanish on sync', () => {
+  assert.throws(() => cx.write('Hidden', { type: '.private', body: 'zzhiddenprobe' }),
+    /hidden folder|dot-folder|vanish|never indexed/i,
+    'a dot-folder type must be refused — a note that disappears on sync is worse than an error');
+  // And it really is gone from disk too (nothing was written).
+  const notes = cx.search('zzhiddenprobe');
+  assert.equal(notes.results.length, 0, 'nothing was written under a hidden folder');
+  // Over-fire guard: a normal type with a DOT in the middle (not leading) is a fine folder name.
+  assert.equal(cx.write('Versioned', { type: 'v1.2', body: 'x' }).path, 'v1.2/versioned.md',
+    'a dot in the MIDDLE of a type is fine — only a LEADING dot (a hidden dir) is refused');
+});
+
 function pathToCore() {
   return new URL('../src/core.js', import.meta.url).href;
 }

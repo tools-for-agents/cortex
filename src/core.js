@@ -4,7 +4,7 @@
 // distils what it learns into interconnected notes and pulls just-enough context
 // back out — a durable memory that a human can also open in Obsidian.
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
-import { join, dirname, relative, basename, isAbsolute } from 'node:path';
+import { join, dirname, relative, basename, isAbsolute, sep } from 'node:path';
 import { writeDb, get, all, run, VAULT, storeExists, withWriteLock } from './db.js';
 import { slugify, parseFrontmatter, serializeFrontmatter, parseLinks, parseTags, estTokens } from './notes.js';
 
@@ -246,6 +246,14 @@ function writeLocked(title, { body = '', type, tags, aliases, append = false } =
   if (within === '' || within.startsWith('..') || isAbsolute(within)) {
     throw new Error(`a note type is a folder name, not a path — "${finalType}" would write outside the vault. `
       + `Use one of: ${Object.keys(TYPE_DIR).join(', ')}, or a plain custom name (no "/" or "..").`);
+  }
+  // …and it must not land in a DOT-FOLDER. The vault walk skips any dir starting with "." (.git,
+  // .obsidian, .cortex), so a note written to one is indexed at write time and then PRUNED by the
+  // very next sync — it vanishes from the brain while the file sits on disk, and cortex then reports
+  // "the vault is empty". A silent disappearance is worse than a refusal.
+  if (within.split(sep).slice(0, -1).some((s) => s.startsWith('.'))) {
+    throw new Error(`a note type "${finalType}" is a hidden folder — cortex's vault walk skips dot-folders, `
+      + `so the note would be written but never indexed (it vanishes on the next sync). Use a plain folder name.`);
   }
 
   let newBody = body;

@@ -30,6 +30,12 @@ const CANARIES = [
     into: '  if (false) {',
   },
   {
+    why: 'a note TYPE must not be a DOT-FOLDER — the vault walk skips it, so the note is indexed then pruned by the next sync and vanishes from the brain while the file sits on disk',
+    file: 'src/core.js',
+    find: "  if (within.split(sep).slice(0, -1).some((s) => s.startsWith('.'))) {",
+    into: '  if (false) {',
+  },
+  {
     why: 'two notes with the same filename must BOTH survive — one of them used to vanish',
     file: 'src/core.js',
     find: '    for (const rel of list) m.set(rel, list.length === 1 ? b : pathSlug(rel));',
