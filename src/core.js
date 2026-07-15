@@ -510,6 +510,11 @@ export function suggest(query, { k = 8 } = {}) {
 // links to the notes it already resembles, and the tags those notes carry.
 export function triage({ limit = 12, stub_chars = 120 } = {}) {
   limit = Number.isFinite(+limit) && +limit > 0 ? Math.min(Math.floor(+limit), 100) : 12;
+  // stub_chars binds into `chars < stub_chars` below; a NaN/string makes every comparison false, so no note
+  // is flagged a stub and the backlog silently UNDERCOUNTS (the Cycle-121 gap, here feeding `needing`). A
+  // maintenance report that misses stub-only notes sends the agent away thinking the vault is tidier than it
+  // is. Coerce to a positive int, else the default.
+  stub_chars = Number.isFinite(+stub_chars) && +stub_chars > 0 ? Math.floor(+stub_chars) : 120;
   const rows = all(`SELECT slug, title, type, updated, tags, LENGTH(body) AS chars,
     (slug NOT IN (SELECT src FROM links)
      AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)) AS orphan

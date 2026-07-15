@@ -375,6 +375,19 @@ test('triage reports the WHOLE backlog, not just the shown page', () => {
   assert.ok(capped.truncated, 'and it says the page was cut');
 });
 
+test('triage: a bad stub_chars must not silently undercount the backlog', () => {
+  cx.write('Stub Target', { tags: ['t'], body: 'A target note with more than enough content that it is not itself a stub note here at all.' });
+  cx.write('Stub Only', { tags: ['t'], body: 'See [[Stub Target]].' });   // tagged + outbound link → its ONLY issue is being a stub
+  const so = cx.triage({ limit: 200 }).items.find((i) => i.slug === 'stub-only');
+  assert.ok(so && so.issues.includes('stub') && !so.issues.includes('orphan') && !so.issues.includes('untagged'),
+    'this is a STUB-only case — tagged and linked, just short');
+  // stub_chars feeds `chars < stub_chars`; a NaN made every comparison false, so every stub-only note fell
+  // out of the backlog. It must fall back to the default threshold, not to "count no stubs".
+  const defN = cx.triage({ limit: 200, stub_chars: 120 }).needing;
+  const nanN = cx.triage({ limit: 200, stub_chars: NaN }).needing;
+  assert.equal(nanN, defN, 'a NaN stub_chars behaves like the default threshold, not "no stubs"');
+});
+
 test('serve: POST /api/note writes a note — and writing a ghost heals the broken link', async () => {
   const server = createCortexServer();
   await new Promise((r) => server.listen(0, r));

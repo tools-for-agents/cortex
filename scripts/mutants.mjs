@@ -128,8 +128,8 @@ const CANARIES = [
   {
     why: 'lint\'s stub_chars must be COERCED — bound raw into `LENGTH(body) < ?`, a NaN matches NOTHING (0 stubs) and a string matches EVERYTHING (SQLite orders integers below text), so the health report is silently wrong',
     file: 'src/core.js',
-    find: '  stub_chars = Number.isFinite(+stub_chars) && +stub_chars > 0 ? Math.floor(+stub_chars) : 120;',
-    into: '  void stub_chars;',
+    find: '  // web route, MCP, and direct callers all converge.\n  stub_chars = Number.isFinite(+stub_chars) && +stub_chars > 0 ? Math.floor(+stub_chars) : 120;',
+    into: '  // web route, MCP, and direct callers all converge.\n  void stub_chars;',
   },
   {
     why: 'lint\'s stale_days must be COERCED — Infinity or an astronomical count overflows the cutoff to an Invalid Date and `.toISOString()` throws a raw "Invalid time value" (the /api/lint route lets Infinity through via `+q.stale_days > 0`)',
@@ -142,6 +142,12 @@ const CANARIES = [
     file: 'src/core.js',
     find: '    needing++;',
     into: '    void 0;',
+  },
+  {
+    why: "triage's stub_chars must be COERCED — bound raw into `chars < stub_chars`, a NaN makes every comparison false so NO note is flagged a stub and the maintenance backlog silently undercounts (stub-only notes vanish from `needing`)",
+    file: 'src/core.js',
+    find: '  // is. Coerce to a positive int, else the default.\n  stub_chars = Number.isFinite(+stub_chars) && +stub_chars > 0 ? Math.floor(+stub_chars) : 120;',
+    into: '  // is. Coerce to a positive int, else the default.\n  void stub_chars;',
   },
 ];
 
