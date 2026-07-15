@@ -139,6 +139,23 @@ test('lint reports orphans/broken/untagged/stubs', () => {
     assert.equal(typeof l[k], 'number');
 });
 
+test('lint validates its numeric params — a bad stub_chars/stale_days must not silently mislead or crash', () => {
+  cx.write('Lint Stub Short', { body: 'tiny' });              // < 120 chars → a stub at the default threshold
+  cx.write('Lint Stub Long', { body: 'x'.repeat(400) });      // > 120 chars → NOT a stub
+  const base = cx.lint().stub_count;                          // default threshold 120
+  assert.ok(base >= 1, 'the short note is a stub at the default threshold');
+  // stub_chars binds into `LENGTH(body) < ?`: a NaN matched NOTHING (0 stubs) and a string matched
+  // EVERYTHING (SQLite orders every integer below any text) — a maintenance report quietly wrong. Both
+  // must fall back to the default, not to a fabricated stub set.
+  assert.equal(cx.lint({ stub_chars: NaN }).stub_count, base, 'NaN stub_chars falls back to the default, not "0 stubs"');
+  assert.equal(cx.lint({ stub_chars: 'abc' }).stub_count, base, 'a string stub_chars falls back to the default, not "every note is a stub"');
+  // stale_days feeds Date arithmetic; Infinity or an astronomically large count overflowed the cutoff to
+  // an Invalid Date and `.toISOString()` threw a raw "Invalid time value" (the /api/lint route even has
+  // `+q.stale_days > 0`, which lets Infinity straight through).
+  assert.doesNotThrow(() => cx.lint({ stale_days: Infinity }), 'Infinity stale_days must not crash lint');
+  assert.doesNotThrow(() => cx.lint({ stale_days: 1e9 }), 'a giant stale_days is capped, not overflowed into an Invalid Date');
+});
+
 test('slugify transliterates Turkish/accented titles to clean ascii', () => {
   assert.equal(cx.write('Ağ Katmanı', { body: 'network layer' }).slug, 'ag-katmani');
   assert.equal(cx.write('Café Déjà', { body: 'x' }).slug, 'cafe-deja');

@@ -125,6 +125,18 @@ const CANARIES = [
     find: '    if (r.error) {',
     into: '    if (false) {',
   },
+  {
+    why: 'lint\'s stub_chars must be COERCED — bound raw into `LENGTH(body) < ?`, a NaN matches NOTHING (0 stubs) and a string matches EVERYTHING (SQLite orders integers below text), so the health report is silently wrong',
+    file: 'src/core.js',
+    find: '  stub_chars = Number.isFinite(+stub_chars) && +stub_chars > 0 ? Math.floor(+stub_chars) : 120;',
+    into: '  void stub_chars;',
+  },
+  {
+    why: 'lint\'s stale_days must be COERCED — Infinity or an astronomical count overflows the cutoff to an Invalid Date and `.toISOString()` throws a raw "Invalid time value" (the /api/lint route lets Infinity through via `+q.stale_days > 0`)',
+    file: 'src/core.js',
+    find: '  stale_days = Number.isFinite(+stale_days) && +stale_days > 0 ? Math.min(Math.floor(+stale_days), MAX_STALE_DAYS) : 0;',
+    into: '  void stale_days;',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

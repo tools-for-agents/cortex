@@ -553,7 +553,20 @@ export function weave(query, { tags = [], links = [] } = {}) {
   return write(n.title, { tags, body, append: true });   // append merges tags and keeps the body
 }
 
+// A "stale" horizon of a century is beyond any real vault — and it keeps stale_days × a day of ms
+// well inside the valid Date range, so the cutoff below can never become an Invalid Date.
+const MAX_STALE_DAYS = 36_500;   // 100 years
 export function lint({ stub_chars = 120, stale_days = 0 } = {}) {
+  // Both are user-supplied numbers (MCP args, the /api/lint query string, a direct caller) and both
+  // feed code a bad value corrupts SILENTLY or FATALLY. stub_chars binds into `LENGTH(body) < ?`: a
+  // NaN matches NOTHING (0 stubs) and a string matches EVERYTHING (SQLite orders every integer below
+  // any text), so an unvalidated value makes this maintenance report quietly wrong. stale_days feeds
+  // Date arithmetic: Infinity or an astronomically large count pushes the cutoff outside the valid Date
+  // range and `.toISOString()` throws a raw "RangeError: Invalid time value" (the /api/lint route even
+  // has `+q.stale_days > 0`, which lets Infinity through). Coerce both at the core — the one place the
+  // web route, MCP, and direct callers all converge.
+  stub_chars = Number.isFinite(+stub_chars) && +stub_chars > 0 ? Math.floor(+stub_chars) : 120;
+  stale_days = Number.isFinite(+stale_days) && +stale_days > 0 ? Math.min(Math.floor(+stale_days), MAX_STALE_DAYS) : 0;
   const orphans = all(`SELECT slug,title FROM notes
     WHERE slug NOT IN (SELECT src FROM links) AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)
     ORDER BY updated DESC`);
