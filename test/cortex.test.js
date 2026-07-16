@@ -1104,6 +1104,48 @@ test('a SYNC must not make a note VANISH while it is being reindexed', async () 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+// The same guarantee as the race above, but DETERMINISTIC — no timing, no CPU luck.
+// 🔑 The race test above can only see the vanish window if the searcher happens to sample DURING it,
+// and that is a coin the hardware flips: this canary SURVIVED in CI while killing 24/24 locally, and
+// the fix was to stop the sync from starting until the searcher was up. But a race you have to
+// ARRANGE is still a race. scout hit this twice and found the way out: `withWriteLock` takes a
+// CALLBACK, so we do not have to race the gap — we STAND IN IT. Do putNote's exact FTS rewrite
+// (DELETE then INSERT) inside the lock, and have a SECOND connection read at the split point. WAL
+// gives that reader a snapshot: with a real transaction it sees the OLD entry (still there); with
+// the BEGIN removed the DELETE auto-commits and the reader sees NOTHING — 0 hits for a note that is
+// right there. Fires every run, on any hardware.
+//
+// It cannot replace the race: this stands in the gap of the lock ITSELF, so it proves the primitive
+// is atomic — not that putNote actually CALLS it. That call site has no seam to stand in, so the
+// (now honest) race above is what guards it. Deterministic for the primitive, raced for the caller.
+test('withWriteLock keeps an FTS rewrite atomic to a concurrent reader — deterministically (the VANISH canary)', async (t) => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { withWriteLock, run: dbRun, DB_PATH } = await import('../src/db.js');
+  const TOKEN = 'zzatomicprobe';
+  const { slug } = cx.write('Atomic Probe', { type: 'concept', body: `${TOKEN} body text` });
+
+  // conn B: a SEPARATE connection — the concurrent reader. WAL is already on (the store is open).
+  const connB = new DatabaseSync(DB_PATH);
+  connB.exec('PRAGMA busy_timeout = 5000;');
+  t.after(() => { try { connB.close(); } catch { /* already closed */ } });
+  const readerSees = () => connB.prepare('SELECT COUNT(*) n FROM notes_fts WHERE notes_fts MATCH ?').get(TOKEN).n;
+
+  assert.equal(readerSees(), 1, 'sanity: the reader sees the note before any rewrite');
+
+  let seenAtGap = null;
+  withWriteLock(() => {
+    dbRun('DELETE FROM notes_fts WHERE slug=?', slug);          // exactly what putNote does…
+    seenAtGap = readerSees();                                   // …and the concurrent reader, RIGHT in the gap
+    dbRun('INSERT INTO notes_fts (slug,title,tags,body) VALUES (?,?,?,?)',
+      slug, 'Atomic Probe', '', `${TOKEN} body text`);
+  });
+
+  assert.equal(seenAtGap, 1,
+    'a reader between the FTS DELETE and INSERT must still see the note — the rewrite is one transaction, '
+    + 'not two separately-committed statements (with BEGIN removed this reads 0: the note vanished mid-write)');
+  assert.equal(readerSees(), 1, 'and it is still there afterwards');
+});
+
 test('a note file is never TORN — the markdown IS the truth, and it must never be half-written', async () => {
   // writeFileSync opens with O_TRUNC: the file is emptied, then refilled. Anyone reading it in between
   // gets a partial note — neither the old one nor the new one. Measured: a reader watching one note
