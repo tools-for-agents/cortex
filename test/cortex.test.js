@@ -1044,16 +1044,30 @@ test('a SYNC must not make a note VANISH while it is being reindexed', async () 
   const env = { ...process.env, CORTEX_VAULT: v };
   const N = 15;
 
-  // 🔑 THE SEARCHER MUST RUN FOR EXACTLY AS LONG AS THE SYNC — NOT FOR A FIXED TIME. A fixed window
-  // only HOPES to overlap the writes: scout's twin of this test caught the race locally and MISSED it
-  // in CI, so its canary SURVIVED there. A race test that only sometimes reproduces the race only
-  // sometimes guards — and a flaky canary teaches you to ignore the gate. The writer drops a sentinel
-  // when it is done and the searcher polls until it appears: full overlap, on any hardware.
+  // 🔑 A RACE TEST MUST PROVE IT ACTUALLY RACED. A DONE sentinel alone synchronizes only the END of
+  // the race: nothing holds the sync back until the searcher is up, so a searcher that loses the
+  // node-boot toss samples the TAIL. Measured, with the lock deliberately removed: a searcher
+  // starting 28ms late got `iters=1` — ONE search, landing after the last write, seeing a perfectly
+  // consistent index and PASSING. 3 runs in 10. That is how this canary survived in CI while killing
+  // locally 24/24: `min === N` from one sample is not evidence the invariant held, it is evidence
+  // that nothing was measured — and the two are indistinguishable from the assert.
+  //
+  // So the barrier is two-sided (the searcher warms up, signals READY, and only THEN does the sync
+  // begin), and the sample count is asserted: a race that did not happen must be RED, never green.
+  const ready = pjoin(dir, 'READY');
   const done = pjoin(dir, 'DONE');
+  const MIN_SAMPLES = 50;   // full overlap yields 200+ here and ~100 on a 2-core runner
   const syncer = pjoin(dir, 'sync.mjs');
   writeFileSync(syncer, `
     import fs from 'node:fs';
     const m = await import(${JSON.stringify(core)});
+    // wait for the searcher — sleeping, not spinning: a busy-wait would starve it of the second core
+    const nap = new Int32Array(new SharedArrayBuffer(4));
+    const t0 = Date.now();
+    while (!fs.existsSync(${JSON.stringify(ready)})) {
+      if (Date.now() - t0 > 30000) throw new Error('the searcher never signalled READY — no race happened');
+      Atomics.wait(nap, 0, 0, 2);
+    }
     for (let i = 0; i < 8; i++) m.sync({ reindex: true });
     fs.writeFileSync(${JSON.stringify(done)}, 'x');
   `);
@@ -1061,9 +1075,15 @@ test('a SYNC must not make a note VANISH while it is being reindexed', async () 
   writeFileSync(seek, `
     import fs from 'node:fs';
     const m = await import(${JSON.stringify(core)});
-    let min = 1e9;
-    while (!fs.existsSync(${JSON.stringify(done)})) { const r = m.search('zzsyncrace', { k: 50 }); if (r.matched < min) min = r.matched; }
-    console.log(min);
+    m.search('zzsyncrace', { k: 50 });          // warm up: the first search opens the db and prepares
+    fs.writeFileSync(${JSON.stringify(ready)}, 'x');   // ...only now may the sync start
+    let min = 1e9, iters = 0;
+    while (!fs.existsSync(${JSON.stringify(done)})) {
+      const r = m.search('zzsyncrace', { k: 50 });
+      if (r.matched < min) min = r.matched;
+      iters++;
+    }
+    console.log(JSON.stringify({ min, iters }));
   `);
 
   const run = (s) => new Promise((res, rej) =>
@@ -1074,8 +1094,13 @@ test('a SYNC must not make a note VANISH while it is being reindexed', async () 
       ['-e', `import(${JSON.stringify(core)}).then(m => { for (let i = 0; i < ${N}; i++) m.write('n' + i, { body: 'holds zzsyncrace here' }); })`],
       { env });
     const [, seen] = await Promise.all([run(syncer), run(seek)]);   // sync WHILE searching
-    assert.equal(+seen.trim(), N,
-      `every search during a sync must see all ${N} notes — the fewest seen was ${seen.trim()}`);
+    const { min, iters } = JSON.parse(seen.trim());
+    // the measurement is checked BEFORE the invariant — an unraced race proves nothing either way
+    assert.ok(iters >= MIN_SAMPLES,
+      `the searcher only got ${iters} searches in while the sync ran — too few to have raced it. `
+      + 'A pass here would mean nothing was measured, not that the index held together.');
+    assert.equal(min, N,
+      `every one of the ${iters} searches during a sync must see all ${N} notes — the fewest seen was ${min}`);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
