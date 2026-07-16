@@ -174,8 +174,14 @@ const CANARIES = [
     into: '    const counts = {};\n    for (const sg of suggestions) {',
   },
   {
+    why: 'the ink on a coloured chip is decided by THE COLOUR, not the theme — `color:#fff` is unreadable on every type colour in the dark palette (1.61:1 on source, 2.72:1 on moc), and no per-theme token fixes it: --badge-ink is #fff in light, which fails on project/source/moc',
+    file: 'public/render.js',
+    find: 'export const inkOn = (bg) => (contrast(INK_DARK, bg) >= contrast(INK_LIGHT, bg) ? INK_DARK : INK_LIGHT);',
+    into: "export const inkOn = () => '#ffffff';",
+  },
+  {
     why: 'the note body must read its wikilinks out of the RAW text — escape the paragraph first and [[Tom & Jerry]] becomes [[Tom &amp; Jerry]]: the label renders "Tom &amp;amp; Jerry" and the target slugs to something no note has, so a link to a note that EXISTS is drawn `wl broken` and is not clickable. The server said broken:false about the same link',
-    file: 'public/notebody.js',
+    file: 'public/render.js',
     find: '    + p.split(/(\\[\\[[^\\]]+\\]\\])/g).map((seg) => {',
     into: '    + esc(p).split(/(\\[\\[[^\\]]+\\]\\])/g).map((seg) => {',
   },

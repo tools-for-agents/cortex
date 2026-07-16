@@ -25,6 +25,41 @@
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// ── the ink a colour can carry ────────────────────────────────────────────────
+//
+// 🔑 THE READABLE INK IS A PROPERTY OF THE COLOUR, NOT OF THE THEME.
+//
+// The type chip is the node's colour with the type's name on it, and it was written `color:#fff`.
+// Measured against this page's own palette, white fails on EVERY type colour in the dark theme —
+// 1.61:1 on source, 2.72:1 on moc ("map"), which is what the eye finally reported. And there is no
+// per-theme token that fixes it: `--badge-ink` exists for exactly this job, but on the LIGHT palette
+// it is #fff, which passes on concept and entity and fails on project, source and moc. One token,
+// five backgrounds, two different right answers — because the question is not "which theme is this",
+// it is "how bright is the thing behind the text".
+//
+// So: ask the colour. Pick whichever of the two inks it can actually carry.
+// (In scout the same question had NO answer — its language colours are mid-tones that fail against
+// black AND white — so the colour became a dot there. Here every type colour can carry an ink, so
+// the badge keeps being a badge. Same rule, opposite conclusion, both from the measurement.)
+const lum = (hex) => {
+  const h = String(hex).trim().replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6), 16);
+  if (!Number.isFinite(n)) return 0;
+  const ch = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  // every channel goes through ch() — the blue one did not, and a raw 0-255 value in a formula that
+  // expects 0-1 made #ffc24d read as 3.78:1 against an ink that is really 12.07:1 away from it. The
+  // palette test below caught it on its first run, which is the argument for testing the measurement
+  // and not just the thing measured.
+  return 0.2126 * ch((n >> 16) & 255) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+};
+export const contrast = (a, b) => {
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+};
+export const INK_DARK = '#0b0d16';   // --badge-ink's dark value: the page's own "ink on a colour"
+export const INK_LIGHT = '#ffffff';
+export const inkOn = (bg) => (contrast(INK_DARK, bg) >= contrast(INK_LIGHT, bg) ? INK_DARK : INK_LIGHT);
+
 // ONE reading of a [[wikilink]], shared by the note body AND the search snippet so the two can
 // never drift: the TARGET is everything before the first pipe with any #heading trimmed (exactly
 // as the server's parseLinks does, so [[Note#sec]] resolves to Note instead of rendering broken);

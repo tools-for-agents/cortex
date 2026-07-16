@@ -7,6 +7,14 @@
     --line:#232b47; --line-2:#2e3860; --ink:#eaeffb; --ink-dim:#8e99b9; --ink-faint:#7580a3; --danger:#f0776a;
     --accent:#8ab4ff; --accent-2:#c4a5ff; --badge-ink:#0b0d16;
     --n-project:#2fe6a6; --n-concept:#7aa2ff; --n-source:#ffc24d; --n-entity:#cf9bff; --n-moc:#ff6b8b;
+  /* 🔑 A NODE COLOUR IS A DOT ON A DARK CANVAS. It is not automatically an INK.
+     These five are tuned to glow on the graph, and the panel reused them as text: on the dark panel
+     they all clear AA (6.9–11.7:1), on the WHITE one three of five fail — project 2.54, source 2.77,
+     moc 4.14. The eye only ever reported moc, because only that type happened to be on screen.
+     So the ink is its own ROLE with its own tokens: the dot keeps glowing, the text stays readable,
+     and neither has to compromise for the other. (In dark they are the same colour — declared anyway,
+     so the role is complete and nobody has to remember which theme was the exception.) */
+    --n-project-ink:#2fe6a6; --n-concept-ink:#7aa2ff; --n-source-ink:#ffc24d; --n-entity-ink:#cf9bff; --n-moc-ink:#ff6b8b;
     --shadow:0 24px 70px -18px rgba(0,0,0,.85); --ctrl:rgba(20,26,44,.7);
   }
   @media (prefers-color-scheme: light) {
@@ -16,11 +24,12 @@
       --line:#dde4f1; --line-2:#c8d2e6; --ink:#111830; --ink-dim:#57617d; --ink-faint:#66708c; --danger:#a3231a;
       --accent:#2f57cf; --accent-2:#7a45e0; --badge-ink:#fff;
       --n-project:#06b981; --n-concept:#3b6bf0; --n-source:#d98a00; --n-entity:#8b46e6; --n-moc:#e0405f;
+      --n-project-ink:#04855d; --n-concept-ink:#3b6bf0; --n-source-ink:#a36800; --n-entity-ink:#8b46e6; --n-moc-ink:#ce3b58;
       --shadow:0 24px 60px -22px rgba(40,60,120,.3); --ctrl:rgba(255,255,255,.82);
     }
   }
-  :root[data-theme="dark"]{--bg:#06080f;--bg-2:#0b0e1c;--glow:#141b3e;--nebula:#1a1140;--panel:rgba(15,19,34,.74);--panel-solid:#0d111f;--card:#141a2c;--line:#232b47;--line-2:#2e3860;--ink:#eaeffb;--ink-dim:#8e99b9;--ink-faint:#7580a3;--accent:#8ab4ff;--accent-2:#c4a5ff;--badge-ink:#0b0d16;--n-project:#2fe6a6;--n-concept:#7aa2ff;--n-source:#ffc24d;--n-entity:#cf9bff;--n-moc:#ff6b8b;--shadow:0 24px 70px -18px rgba(0,0,0,.85);--ctrl:rgba(20,26,44,.7);}
-  :root[data-theme="light"]{--bg:#f4f7fe;--bg-2:#eaf0fb;--glow:#e2eafb;--nebula:#ece6fb;--panel:rgba(255,255,255,.8);--panel-solid:#fff;--card:#f4f7fe;--line:#dde4f1;--line-2:#c8d2e6;--ink:#111830;--ink-dim:#57617d;--ink-faint:#66708c;--accent:#2f57cf;--accent-2:#7a45e0;--badge-ink:#fff;--n-project:#06b981;--n-concept:#3b6bf0;--n-source:#d98a00;--n-entity:#8b46e6;--n-moc:#e0405f;--shadow:0 24px 60px -22px rgba(40,60,120,.3);--ctrl:rgba(255,255,255,.82);}
+  :root[data-theme="dark"]{--bg:#06080f;--bg-2:#0b0e1c;--glow:#141b3e;--nebula:#1a1140;--panel:rgba(15,19,34,.74);--panel-solid:#0d111f;--card:#141a2c;--line:#232b47;--line-2:#2e3860;--ink:#eaeffb;--ink-dim:#8e99b9;--ink-faint:#7580a3;--accent:#8ab4ff;--accent-2:#c4a5ff;--badge-ink:#0b0d16;--n-project:#2fe6a6;--n-concept:#7aa2ff;--n-source:#ffc24d;--n-entity:#cf9bff;--n-moc:#ff6b8b;--n-project-ink:#2fe6a6;--n-concept-ink:#7aa2ff;--n-source-ink:#ffc24d;--n-entity-ink:#cf9bff;--n-moc-ink:#ff6b8b;--shadow:0 24px 70px -18px rgba(0,0,0,.85);--ctrl:rgba(20,26,44,.7);}
+  :root[data-theme="light"]{--bg:#f4f7fe;--bg-2:#eaf0fb;--glow:#e2eafb;--nebula:#ece6fb;--panel:rgba(255,255,255,.8);--panel-solid:#fff;--card:#f4f7fe;--line:#dde4f1;--line-2:#c8d2e6;--ink:#111830;--ink-dim:#57617d;--ink-faint:#66708c;--accent:#2f57cf;--accent-2:#7a45e0;--badge-ink:#fff;--n-project:#06b981;--n-concept:#3b6bf0;--n-source:#d98a00;--n-entity:#8b46e6;--n-moc:#e0405f;--n-project-ink:#04855d;--n-concept-ink:#3b6bf0;--n-source-ink:#a36800;--n-entity-ink:#8b46e6;--n-moc-ink:#ce3b58;--shadow:0 24px 60px -22px rgba(40,60,120,.3);--ctrl:rgba(255,255,255,.82);}
 
   *{box-sizing:border-box;}
   html,body{height:100%;margin: 0;}
@@ -126,6 +135,12 @@
     border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(103%);
     transition:transform .4s cubic-bezier(.19,.66,.28,1);overflow-y:auto;padding: 32px 32px 60px;}
   #panel.open{transform:none;}
+  /* 🔑 A SHEET, NOT A SLIVER. At 93vw the panel left 27px of the page showing on a phone — just
+     enough to print the brand as a sliced "c" behind it: 86% of "cortex." under a fixed panel, on a
+     page that cannot scroll, so it could never be moved out from under it. A cover is fine — a modal
+     hiding the page behind it is what a modal IS — but a SLICE is nobody's intention. On a phone the
+     note IS the screen; it has its own × to close. */
+  @media (max-width:560px){ #panel{width:100vw;border-left:none;padding: 32px 20px 60px;} }
   /* ── Composer: write a note straight into the vault ── */
   #composer{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding: 24px;
     background:rgba(4,6,14,.62);backdrop-filter:blur(4px);}
@@ -263,7 +278,9 @@
   #panel h1{font-size:24px;line-height:1.12;margin: 12px 0 16px;letter-spacing:-.02em;text-wrap:balance;}
   .chips{display:flex;flex-wrap:wrap;gap: 8px;margin-bottom: 24px;}
   .chip{font-size:12px;padding: 4px 12px;border-radius:12px;border:1px solid var(--line);color:var(--ink-dim);background:var(--card);font-variant-numeric:tabular-nums;}
-  .chip.type{color:#fff;font-weight:600;border:none;}
+  /* no color here — inkOn(background) decides it per chip: white fails on EVERY type colour
+     in the dark palette (1.61:1 on source, 2.72:1 on moc), and no per-theme token can fix it. */
+  .chip.type{font-weight:600;border:none;}
   .body{font-size:14px;line-height:1.72;color:var(--ink);}
   .body p{margin: 0;max-width:60ch;}
   .wl{color:var(--accent-2);cursor:pointer;font-weight:550;border-bottom:1px solid color-mix(in srgb,var(--accent-2) 35%,transparent);transition:border-color .15s;}
@@ -431,7 +448,7 @@
 <aside id="inbox" aria-label="Inbox"><div class="close" id="ix" role="button" tabindex="0" aria-label="Close">×</div><div id="ib"></div></aside>
 
 <script type="module">
-import { renderBody, wikiParts, esc } from './notebody.js';
+import { renderBody, wikiParts, esc, inkOn } from './render.js';
 "use strict";
 const TYPE={moc:{label:"map"},project:{label:"tool"},concept:{label:"concept"},source:{label:"source"},entity:{label:"entity"},note:{label:"note"},synthesis:{label:"synthesis"},person:{label:"person"},daily:{label:"daily"},area:{label:"area"}};
 const TYPE_COLOR={project:"project",concept:"concept",source:"source",entity:"entity",moc:"moc",note:"concept",synthesis:"entity",person:"moc",daily:"concept",area:"source"};
@@ -647,8 +664,11 @@ let PAL={}, isDark=true;
 function readPalette(){const dt=document.documentElement.getAttribute("data-theme");
   isDark=dt?dt==="dark":matchMedia("(prefers-color-scheme: dark)").matches;
   PAL={project:css("--n-project"),concept:css("--n-concept"),source:css("--n-source"),entity:css("--n-entity"),moc:css("--n-moc"),
+    inkProject:css("--n-project-ink"),inkConcept:css("--n-concept-ink"),inkSource:css("--n-source-ink"),inkEntity:css("--n-entity-ink"),inkMoc:css("--n-moc-ink"),
     ghost:css("--ink-faint"),ink:css("--ink"),dim:css("--ink-dim"),bg:css("--bg"),bg2:css("--bg-2"),glow:css("--glow"),nebula:css("--nebula"),line:css("--line"),accent2:css("--accent-2")};}
 const colorOf=n=>PAL[TYPE_COLOR[n.type]||"concept"]||PAL.concept;
+// the same type, in the role that has to be READ rather than seen — see --n-*-ink above
+const inkOfType=n=>{const k=TYPE_COLOR[n.type]||"concept";return PAL["ink"+k[0].toUpperCase()+k.slice(1)]||colorOf(n);};
 function resize(){W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
 function rgba(c,a){c=c.trim();if(c[0]==="#"){let h=c.slice(1);if(h.length===3)h=h.split("").map(x=>x+x).join("");const n=parseInt(h,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}return c;}
 function mixWhite(c,t){c=c.trim();let h=c.slice(1);if(h.length===3)h=h.split("").map(x=>x+x).join("");const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255,f=v=>Math.round(v+(255-v)*t);return `rgb(${f(r)},${f(g)},${f(b)})`;}
@@ -1328,9 +1348,9 @@ async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
   const backBtn=prev?`<div class="back" id="backBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>back to ${esc(prev.title)}</div>`:"";
   const label=(TYPE[n.type]||{label:n.type}).label;
   document.getElementById("pb").innerHTML=
-    `${backBtn}<div class="kicker mono" style="color:${colorOf(n)}">${label}</div>
+    `${backBtn}<div class="kicker mono" style="color:${inkOfType(n)}">${label}</div>
      <h1>${esc(n.title)}</h1>
-     <div class="chips" id="chips"><span class="chip type" style="background:${colorOf(n)}">${label}</span><span class="chip">${back.length} backlinks</span><span class="chip">${fwd.length} links out</span>${related.length?`<span class="chip">${related.length} related</span>`:""}</div>
+     <div class="chips" id="chips"><span class="chip type" style="background:${colorOf(n)};color:${inkOn(colorOf(n))}">${label}</span><span class="chip">${back.length} backlinks</span><span class="chip">${fwd.length} links out</span>${related.length?`<span class="chip">${related.length} related</span>`:""}</div>
      ${(back.length+fwd.length)?`<button class="focus-btn" id="focusBtn" data-focus="${n.id}" title="Isolate this note's neighbourhood in the graph">◎ focus neighbourhood</button>`:""}
      <div class="body" id="noteBody">…</div>
      ${fwd.length?`<div class="meta"><div class="t">Links to</div>${rows(fwd)}</div>`:""}

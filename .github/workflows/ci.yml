@@ -126,6 +126,46 @@ jobs:
             const shown=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.visibility!=='hidden'&&s.display!=='none'&&r.width>0&&r.height>0;};const vis=[...document.querySelectorAll('.empty,.empty2,.welcome,.list-empty,.detail-empty,.flow-empty,.act-empty')].filter(shown);if(!vis.length) throw new Error('THE SERVER SAID EMPTY AND THE PAGE SAID NOTHING — a fresh install shows the user a blank room');
           tokens: kit
 
+  # ── …AND THE NOTE, WHICH IS THE WHOLE POINT OF A SECOND BRAIN ─────────────────
+  #
+  # `look` seeds a vault and renders the GRAPH. `first-run` renders it empty. `states` poses the
+  # page by setting classes. Not one of them had ever OPENED A NOTE — the panel where you actually
+  # read what you wrote, which is the only reason the graph is a door rather than a picture.
+  #
+  # Note that this gate reaches its state by USING the app (the deep-link hash a cross-tool link
+  # would use), not by posing it. The first look that ever opened a note found, at every viewport
+  # and both themes: the type chip's `color:#fff` at 2.72:1 (white is unreadable on ALL FIVE type
+  # colours in the dark palette — 1.61:1 on source), and on a phone the panel left a 27px sliver
+  # that printed the brand as a sliced "c" — 86% of "cortex." under a fixed panel on a page that
+  # cannot scroll. Nothing else in this repo could have seen either.
+  look-note:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Serve it, THEN prove there is a note to open
+        run: |
+          CORTEX_VAULT=./vault node scripts/seed.js
+          CORTEX_VAULT=./vault node src/cli.js serve &
+          for i in $(seq 30); do curl -sf http://localhost:7800/api/stats >/dev/null && break; sleep 1; done
+          n=$(curl -sf http://localhost:7800/api/graph | node -pe "(JSON.parse(require('fs').readFileSync(0)).nodes||[]).filter(x=>!x.ghost).length")
+          echo "real notes the gate can open: $n"
+          test "$n" -gt 0 || { echo "::error::no real notes — iris would audit a graph with nothing to open"; exit 1; }
+      - uses: tools-for-agents/iris@main
+        with:
+          url: http://localhost:7800/
+          viewports: phone,tablet,desktop
+          name: cortex-note
+          tokens: kit      # the kit's ONE design system — iris/tokens.json, not a copy
+          strict: true     # drift is a regression now; a gate is what keeps it from creeping back
+          # Open a real note the way a cross-tool deep link does, then assert the panel actually has
+          # the note in it. A --pre that throws makes iris report "the state was never reached and
+          # NOTHING was audited" instead of quietly grading the graph behind it.
+          pre: >-
+            await new Promise(r=>setTimeout(r,1500));const g=await (await fetch('/api/graph')).json();const n=(g.nodes||[]).find(x=>!x.ghost);if(!n) throw new Error('the seeded vault has no real notes — nothing to open');location.hash='#'+n.id;await new Promise(r=>setTimeout(r,1500));if(!document.getElementById('noteBody')?.textContent?.trim()) throw new Error('the note panel opened EMPTY — that is an empty room, not a note');
+
   # ── THE STATES NOTHING EVER RENDERED ──────────────────────────────────────────
   # `test` proves the logic. `look` renders the page WORKING. `first-run` renders it
   # EMPTY. Not one of them has ever rendered a control that cannot be pressed, or a row
