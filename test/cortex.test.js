@@ -10,7 +10,25 @@ const vault = mkdtempSync(join(tmpdir(), 'cortex-test-'));
 process.env.CORTEX_VAULT = vault;
 process.on('exit', () => { try { rmSync(vault, { recursive: true, force: true }); } catch {} });
 
+// both imported HERE, dynamically — after CORTEX_VAULT is set above. A static import at the top of
+// this file would be hoisted and would freeze db.js's VAULT to './vault' first. See the guard below.
 const cx = await import('../src/core.js');
+const { VAULT } = await import('../src/db.js');
+
+test('the suite runs against the THROWAWAY vault — never your real second brain', () => {
+  // db.js reads CORTEX_VAULT at MODULE LOAD, so it is frozen by whatever ran first. This file is
+  // careful — it sets the env var above and only then imports core — but "careful" is not a gate.
+  // ONE static `import … from '../src/db.js'` at the top of this file would be hoisted, run db.js
+  // BEFORE line 10, and freeze VAULT to its default `./vault`: the temp vault would still be created,
+  // and every test below would write to your actual notes instead. lens shipped exactly that (fixed
+  // in lens 58fa291) — its suite had been rewriting the developer's real index at the tool's own
+  // default path, and the file header said "a throwaway DB" the whole time. Nothing lied except the
+  // import order, and nothing failed. This is the assertion that would have.
+  assert.equal(VAULT, vault,
+    'db.js resolved VAULT before this file pointed CORTEX_VAULT at a temp dir — it is about to write '
+    + 'to your real vault');
+  assert.ok(VAULT.startsWith(tmpdir()), 'and that path is under the temp dir, not the repo');
+});
 
 test('write creates a note and captures links + inline tags', () => {
   const r = cx.write('Alpha', { type: 'concept', tags: ['x'], body: 'Points to [[Beta]]. #inline' });
