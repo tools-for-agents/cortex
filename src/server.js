@@ -54,6 +54,14 @@ export function createCortexServer() {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         return res.end(await readFile(INDEX));
       }
+      // The page is one file plus this: the note-body renderer, which lives in its own module so it
+      // can be unit-tested (it was reading wikilinks out of already-escaped text and drawing links to
+      // real notes as unwritten). A FIXED path, not a static directory — a served directory is a path
+      // to walk out of, and this server has exactly one asset.
+      if (url.pathname === '/notebody.js') {
+        res.writeHead(200, { 'Content-Type': 'text/javascript' });
+        return res.end(await readFile(join(__dir, '..', 'public', 'notebody.js')));
+      }
       if (url.pathname === '/api/events') {           // Server-Sent Events: pushed when the vault changes
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache',
           Connection: 'keep-alive', 'Access-Control-Allow-Origin': '*' });

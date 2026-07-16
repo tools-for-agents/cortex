@@ -174,6 +174,12 @@ const CANARIES = [
     into: '    const counts = {};\n    for (const sg of suggestions) {',
   },
   {
+    why: 'the note body must read its wikilinks out of the RAW text — escape the paragraph first and [[Tom & Jerry]] becomes [[Tom &amp; Jerry]]: the label renders "Tom &amp;amp; Jerry" and the target slugs to something no note has, so a link to a note that EXISTS is drawn `wl broken` and is not clickable. The server said broken:false about the same link',
+    file: 'public/notebody.js',
+    find: '    + p.split(/(\\[\\[[^\\]]+\\]\\])/g).map((seg) => {',
+    into: '    + esc(p).split(/(\\[\\[[^\\]]+\\]\\])/g).map((seg) => {',
+  },
+  {
     why: "graphData's backlink tally is keyed by note SLUG, so a plain {} makes an orphan slugged 'constructor' read Object.prototype's function as its degree — truthy, so `|| 0` never fires — and it JSON-drops to undefined, losing the number that sizes the node in the web view",
     file: 'src/core.js',
     find: '  const deg = Object.create(null);',

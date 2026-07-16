@@ -430,7 +430,8 @@
 <aside id="journal" aria-label="Journal"><div class="close" id="jx" role="button" tabindex="0" aria-label="Close">×</div><div id="jb"></div></aside>
 <aside id="inbox" aria-label="Inbox"><div class="close" id="ix" role="button" tabindex="0" aria-label="Close">×</div><div id="ib"></div></aside>
 
-<script>
+<script type="module">
+import { renderBody, wikiParts, esc } from './notebody.js';
 "use strict";
 const TYPE={moc:{label:"map"},project:{label:"tool"},concept:{label:"concept"},source:{label:"source"},entity:{label:"entity"},note:{label:"note"},synthesis:{label:"synthesis"},person:{label:"person"},daily:{label:"daily"},area:{label:"area"}};
 const TYPE_COLOR={project:"project",concept:"concept",source:"source",entity:"entity",moc:"moc",note:"concept",synthesis:"entity",person:"moc",daily:"concept",area:"source"};
@@ -1298,17 +1299,13 @@ function exportPNG(){markUsed();hovered=null;
   off.toBlob(b=>{if(!b)return;const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download="cortex-graph.png";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);},"image/png");}
 
 // ── note reader ───────────────────────────────────────────────────────────────
-const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-// ONE reading of a [[wikilink]], shared by the note body AND the search snippet so the two can
-// never drift: the TARGET is everything before the first pipe with any #heading trimmed (exactly
-// as the server's parseLinks does, so [[Note#sec]] resolves to Note instead of rendering broken);
-// the display LABEL is everything AFTER the first pipe, verbatim — so [[a|b|c]] reads "b|c", not
-// "b". Two renderers that answered [[a|b|c]] differently is how you ship a link that shows one
-// thing in the panel and another in search, and silently drops the text after the second pipe.
-function wikiParts(inner){const p=inner.indexOf("|");const head=p<0?inner:inner.slice(0,p);return {target:head.split("#")[0].trim(),label:(p<0?head:inner.slice(p+1)).trim()};}
-function renderBody(t){t=t||"";return t.split(/\n{2,}/).map(p=>"<p>"+esc(p)
-  .replace(/\[\[([^\]]+)\]\]/g,(m,inner)=>{const w=wikiParts(inner),id=resolver.get(slug(w.target));return id?`<span class="wl" data-go="${id}">${esc(w.label)}</span>`:`<span class="wl broken">${esc(w.label)}</span>`;})
-  .replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\n/g,"<br>")+"</p>").join("");}
+// esc comes from ./notebody.js now — and it escapes the QUOTE too, which this one did not.
+// It is interpolated straight into attributes here (data-go="${esc(x.slug)}", title="${esc(...)}"),
+// and a note is titled by its author: `Say "hi"` closed the attribute early. One escaper, shared
+// with the renderer, escaping the four characters that can break out of markup.
+// wikiParts() + renderBody() now live in ./notebody.js — see the import at the top of this script.
+// They were extracted so they could be TESTED: renderBody escaped the paragraph and then read the
+// wikilinks out of the ESCAPED text, so a note titled "Tom & Jerry" was drawn as unwritten.
 const panel=document.getElementById("panel");
 let navStack=[];
 async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
@@ -1345,7 +1342,7 @@ async function openNote(id,opts){const n=bySlug.get(id);if(!n||n.ghost)return;
   wireRows();
   try{const note=await (await fetch("/api/note?slug="+encodeURIComponent(id))).json();
     if(selected!==n)return;
-    const bodyEl=document.getElementById("noteBody");if(bodyEl){bodyEl.innerHTML=renderBody(note.body||"");bodyEl.querySelectorAll("[data-go]").forEach(a=>{a.setAttribute("role","button");a.setAttribute("tabindex","0");const go=()=>openNote(a.dataset.go);a.addEventListener("click",go);a.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});});}   // .wl links: keyboard-reachable, like wireRows
+    const bodyEl=document.getElementById("noteBody");if(bodyEl){bodyEl.innerHTML=renderBody(note.body||"",t=>resolver.get(slug(t)));bodyEl.querySelectorAll("[data-go]").forEach(a=>{a.setAttribute("role","button");a.setAttribute("tabindex","0");const go=()=>openNote(a.dataset.go);a.addEventListener("click",go);a.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});});}   // .wl links: keyboard-reachable, like wireRows
     const ch=document.getElementById("chips");if(ch&&note.tags&&note.tags.length)note.tags.forEach(t=>{const s=document.createElement("span");s.className="chip tag";s.textContent="#"+t;s.style.cursor="pointer";s.setAttribute("role","button");s.setAttribute("tabindex","0");s.setAttribute("aria-label","Filter the graph by #"+t);s.title="Filter the graph by #"+t;const go=()=>setTagFilter(t);s.addEventListener("click",go);s.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});ch.appendChild(s);});   // tag chip: keyboard-reachable, like the overview tagpill
   }catch(e){const b=document.getElementById("noteBody");if(b)b.textContent="(could not load note)";}}   // click to navigate + hover a row to cross-highlight the node in the graph
 function goBack(){const prev=navStack.pop();if(prev)openNote(prev,{back:true});}
