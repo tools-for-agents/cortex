@@ -658,7 +658,9 @@ export function recent({ k = 15 } = {}) {
 
 // ── graph data for the web view (nodes sized by backlink count) ───────────────
 export function graphData() {
-  const deg = {};
+  // keyed by note slug — a title is free text, so `constructor`/`toString` are reachable slugs.
+  // A plain {} would answer `deg['constructor']` with Object.prototype's function, not 0.
+  const deg = Object.create(null);
   for (const r of all('SELECT dst, COUNT(*) n FROM links WHERE dst IS NOT NULL GROUP BY dst')) deg[r.dst] = r.n;
   // `updated` gives the graph a time dimension — the web view shades nodes by how
   // recently the note was touched, so a cooling corner of the vault is visible.

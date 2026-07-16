@@ -286,6 +286,21 @@ test('graphData carries each note\'s updated time (the graph\'s time dimension)'
   }
 });
 
+test('graphData sizes an orphan note by 0 even when its slug is an Object.prototype key', () => {
+  // A title is free text, so `constructor` is a reachable slug. The backlink tally was a plain
+  // {}, so an orphan named this way read its degree off Object.prototype: `deg['constructor'] || 0`
+  // is the Object FUNCTION, which is truthy — so `|| 0` never fires. It then JSON-drops to
+  // undefined on the way to the web view, and the node loses the number that sizes it.
+  cx.write('Constructor', { type: 'concept', body: 'A note about building objects.' });
+  const node = cx.graphData().nodes.find((n) => n.id === 'constructor');
+
+  assert.equal(typeof node.deg, 'number', 'deg is a number, not an inherited prototype member');
+  assert.equal(node.deg, 0, 'nothing links to it, so its degree is 0');
+  // the web view gets JSON, where a function is not a value — this is where the bug surfaced
+  const shipped = JSON.parse(JSON.stringify(node));
+  assert.equal(shipped.deg, 0, 'the degree survives the trip to the browser');
+});
+
 // ── serve: capture is the one write the web view exposes ─────────────────────
 const { createCortexServer } = await import('../src/server.js');
 

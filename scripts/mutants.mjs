@@ -173,6 +173,12 @@ const CANARIES = [
     find: '    const counts = Object.create(null);\n    for (const sg of suggestions) {',
     into: '    const counts = {};\n    for (const sg of suggestions) {',
   },
+  {
+    why: "graphData's backlink tally is keyed by note SLUG, so a plain {} makes an orphan slugged 'constructor' read Object.prototype's function as its degree — truthy, so `|| 0` never fires — and it JSON-drops to undefined, losing the number that sizes the node in the web view",
+    file: 'src/core.js',
+    find: '  const deg = Object.create(null);',
+    into: '  const deg = {};',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,
