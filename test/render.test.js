@@ -158,3 +158,60 @@ test('both declarations of a theme agree — the page says they are kept in sync
     assert.ok(Object.keys(a).length >= 10, `${theme}: found the five dots and the five inks (got ${JSON.stringify(a)})`);
   }
 });
+
+// ── the quiet greys, graded by the kit's own rules ────────────────────────────
+// iris flags two roles of a GAME's palette as `indistinct-roles` when they sit closer than the
+// tolerance used to match a pixel to a role — "Two roles a player cannot tell apart are one role and
+// a bug report." Nothing had ever asked that of a stylesheet, and the answer cost lens a token
+// (--dim was 20.2 from --muted and failed AA wherever --muted passed) and scout another (--faint,
+// 18.4 from --muted on paper, which made its search placeholder unreadable on every page load).
+//
+// cortex is NOT that case, and this test says so out loud rather than leaving it to luck: its two
+// quiet inks are 72.6 apart (dark) and 45.0 (light). This is the guard that keeps a third grey from
+// being slipped between them later.
+const HEX = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+// iris's own redmean distance (src/core.js) and its own tolerance (iris/tokens.json game.tolerance).
+const dist = (a, b) => { const rb = (a[0] + b[0]) / 2, dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+  return Math.sqrt((2 + rb / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rb) / 256) * db * db); };
+const TOLERANCE = 30;
+const QUIET = ['ink-dim', 'ink-faint'];
+
+const inkOf = (theme, name) => {
+  const block = page.match(new RegExp(`:root\\[data-theme="${theme}"\\]\\{([^}]*)\\}`))?.[1] ?? '';
+  return block.match(new RegExp(`--${name}: *(#[0-9a-f]{3,8})`, 'i'))?.[1]?.toLowerCase() ?? null;
+};
+
+test('the quiet inks are either an honest alias or genuinely distinguishable — never a near-miss', () => {
+  for (const theme of ['dark', 'light']) {
+    const inks = QUIET.map((n) => [n, inkOf(theme, n)]).filter(([, v]) => v);
+    assert.equal(inks.length, 2, `${theme}: found both quiet inks (got ${JSON.stringify(inks)})`);
+    const d = dist(HEX(inks[0][1]), HEX(inks[1][1]));
+    assert.ok(d === 0 || d >= TOLERANCE,
+      `${theme}: --${inks[0][0]} ${inks[0][1]} and --${inks[1][0]} ${inks[1][1]} are ${d.toFixed(1)} apart. `
+      + `Either they are the SAME grey (say so with var()) or they are ${TOLERANCE}+ apart and someone can see `
+      + `the difference. In between is a distinction nobody can see, whose spare twin fails AA where the other passes.`);
+  }
+});
+
+// 🔑 ONLY THE SURFACES THE INK ACTUALLY LANDS ON.
+// A full ink × surface matrix over-asserts: it flagged --ink-faint on --card (4.43) and --bg-2 (4.31),
+// and BOTH pairs are imaginary — measured in the browser, --ink-faint only ever sits on --bg, --panel
+// (translucent) and --panel-solid, where it reads 5.12 / 4.84 / 4.81 (dark) and 4.60 / 4.86 / 4.93
+// (light). Asserting a pair that never occurs is how you end up "fixing" a colour nobody can see, and
+// half of scout's matrix was hypothetical the same way. The translucent --panel is left to iris, which
+// composites it for real; a static test cannot.
+const OPAQUE_SURFACES_IN_USE = ['bg', 'panel-solid'];
+
+test('every quiet ink clears AA on the opaque surfaces it is measured on', () => {
+  for (const theme of ['dark', 'light']) {
+    for (const ink of QUIET) {
+      const iv = inkOf(theme, ink);
+      for (const surf of OPAQUE_SURFACES_IN_USE) {
+        const sv = inkOf(theme, surf);
+        if (!iv || !sv) continue;
+        const r = contrast(iv, sv);
+        assert.ok(r >= 4.5, `${theme}: --${ink} ${iv} on --${surf} ${sv} is ${r.toFixed(2)}:1 — under the 4.5 this kit declares`);
+      }
+    }
+  }
+});

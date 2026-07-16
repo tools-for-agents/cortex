@@ -174,6 +174,12 @@ const CANARIES = [
     into: '    const counts = {};\n    for (const sg of suggestions) {',
   },
   {
+    why: 'two quiet greys nobody can tell apart are ONE grey, and the spare is always the twin that fails AA where the other passes — it cost lens a token (--dim, 20.2 from --muted) and scout another (--faint, 18.4 on paper, which made its search placeholder unreadable on every page load). cortex is 72.6/45.0 apart TODAY; this is the guard that keeps a third grey from being slipped between them',
+    file: 'public/index.html',
+    find: '--ink-dim:#8e99b9;--ink-faint:#7580a3;',
+    into: '--ink-dim:#8e99b9;--ink-faint:#8892b0;',
+  },
+  {
     why: 'the ink on a coloured chip is decided by THE COLOUR, not the theme — `color:#fff` is unreadable on every type colour in the dark palette (1.61:1 on source, 2.72:1 on moc), and no per-theme token fixes it: --badge-ink is #fff in light, which fails on project/source/moc',
     file: 'public/render.js',
     find: 'export const inkOn = (bg) => (contrast(INK_DARK, bg) >= contrast(INK_LIGHT, bg) ? INK_DARK : INK_LIGHT);',
