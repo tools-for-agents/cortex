@@ -90,6 +90,14 @@ jobs:
           name: cortex
           tokens: kit      # the kit's ONE design system — iris/tokens.json, not a copy
           strict: true     # drift is a regression now; a gate is what keeps it from creeping back
+          # A HOVER STATE IS CSS NOBODY HAS EVER LOOKED AT. The legend's rows RAISE under the
+          # pointer — .row:hover paints --card and lifts the label to --ink — and the COUNT beside
+          # the label did not come with it: --ink-faint on --card read 4.43:1, on every row, in a
+          # green build. JS cannot pose :hover (it is the browser's own), so nothing here could
+          # render it. `.solo` reaches the same --card surface with no pointer at all, and is posed
+          # by nothing either. Selectors that live on a note's page are named below by iris rather
+          # than passed over: look-note is where those get rendered.
+          hover: '.brand, .chip, .chip.tag, .crumb, .dot, .focus-btn, .gbtn, .hit, .j-in button, .legend-x, .lnk, .nav a, .note-x, .pill, .results .r, .row, .sbtn, .search-x, .sug, .tagpill, .tb-b, .theme-btn, .tool, .vi, .wl, .xtk a, .back, .backlink'
 
   # THE EMPTY STATE IS THE ONE STATE EVERY USER SEES FIRST — AND NOTHING WAS LOOKING AT IT.
   #

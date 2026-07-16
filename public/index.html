@@ -115,6 +115,12 @@
   #legend .g{width:10px;height:10px;border-radius:50%;box-shadow:0 0 11px 1px currentColor;flex:none;}
   #legend .g.ghost{box-shadow:none;border:1.5px dashed var(--ink-faint);}
   #legend .n{margin-left: auto;font-size:12px;color:var(--ink-faint);font-variant-numeric:tabular-nums;}
+  /* The row RAISES under you — :hover and .solo both paint --card and lift the label to --ink.
+     The count did not come with it: --ink-faint is the faintest ink that survives the PANEL, and
+     on --card it read 4.43:1. Lift it too, to --ink-dim, so it stays a step quieter than the label
+     it sits beside instead of dropping under the 4.5 this kit declares. Both ways in, one rule:
+     .solo reaches the same surface with no pointer involved. */
+  #legend .row:hover .n, #legend .row.solo .n{color:var(--ink-dim);}
 
   /* 30px put it INSIDE the cross-tool strip, which is fixed to the bottom and 37px tall:
      the bottom half of every word was printed over, on a page that cannot scroll, so it
