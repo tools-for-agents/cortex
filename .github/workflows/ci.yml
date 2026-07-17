@@ -233,6 +233,19 @@ jobs:
           hover: '.vi, #vault .close, #health'
           pre: >-
             const until=async(f,ms=8000)=>{const t=Date.now()+ms;while(Date.now()<t){if(f())return true;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for the vault to arrive');};await until(()=>document.querySelectorAll('#legend .row').length>0);document.getElementById('health').click();await until(()=>document.getElementById('vault').classList.contains('open'));await until(()=>document.querySelectorAll('.vi').length>0);
+      # The journal is CLEAN — and it is in here because it is the fourth door, not because it is
+      # broken. It shares the panel CSS the other three were wrong about; a gate is what keeps it
+      # from joining them.
+      - uses: tools-for-agents/iris@main
+        with:
+          url: http://localhost:7800/
+          viewports: phone,tablet,desktop
+          name: cortex-journal
+          tokens: kit
+          strict: true
+          hover: '.j-d, .j-in button, #journal .close'
+          pre: >-
+            const until=async(f,ms=8000)=>{const t=Date.now()+ms;while(Date.now()<t){if(f())return true;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for the journal to arrive');};await until(()=>document.querySelectorAll('#legend .row').length>0);document.getElementById('journalBtn').click();await until(()=>document.getElementById('journal').classList.contains('open'));await until(()=>document.querySelectorAll('.j-in button, .j-d').length>0);
 
   # ── THE STATES NOTHING EVER RENDERED ──────────────────────────────────────────
   # `test` proves the logic. `look` renders the page WORKING. `first-run` renders it

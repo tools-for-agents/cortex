@@ -146,7 +146,7 @@
      page that cannot scroll, so it could never be moved out from under it. A cover is fine — a modal
      hiding the page behind it is what a modal IS — but a SLICE is nobody's intention. On a phone the
      note IS the screen; it has its own × to close. */
-  @media (max-width:560px){ #panel{width:100vw;border-left:none;padding: 32px 20px 60px;} }
+  /* The phone rule for all four panels lives AFTER all four are declared — see the note there. */
   /* ── Composer: write a note straight into the vault ── */
   #composer{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding: 24px;
     background:rgba(4,6,14,.62);backdrop-filter:blur(4px);}
@@ -255,7 +255,8 @@
   #inbox h2{font-size:20px;margin: 0 0 4px;}
   #inbox .lede{color:var(--ink-dim);font-size:12px;margin-bottom: 24px;line-height:1.5;}
   .ibx{border:1px solid var(--line);border-radius:12px;padding: 12px 16px;margin-bottom: 12px;background:var(--card);}
-  .ibx .t{font-weight:650;font-size:14px;cursor:pointer;}
+  /* 17px tall and clickable: under the 24px a finger needs, on every row. */
+  .ibx .t{font-weight:650;font-size:14px;cursor:pointer;min-height: 24px;display:flex;align-items:center;}
   .ibx .t:hover{color:var(--accent-2);}
   .ibx .why{display:flex;gap: 4px;flex-wrap:wrap;margin: 8px 0 12px;}
   /* .ibx sits on --card, and --ink-faint is tuned against --bg: on the raised surface it reads
@@ -281,6 +282,18 @@
   .ibx .weave:disabled{cursor:default; opacity:1 !important; color:var(--ink-dim) !important; background:var(--card) !important; border-color:var(--line) !important; cursor:not-allowed;}
   .ibx.done{opacity:.5;}
   #inbox .empty{color:var(--ink-dim);font-size:12px;}
+
+  /* ── The four panels, on a phone ──────────────────────────────────────────────
+     On a phone a 93vw panel is the worst of both: a 27px sliver of page still showing, and 86% of
+     the brand behind it — text not hidden but GARBLED, under a fixed panel on a page that does not
+     scroll, so it can never be moved out from under. #panel alone had the phone treatment.
+     🔑 AND THE FIX HAD TO MOVE TO GET IT: the old rule sat up beside #panel at the top, where it
+     worked for #panel and silently lost to #vault/#journal/#inbox — same id specificity, declared
+     150 lines LATER, so the 93vw won on source order alone. It read like a rule for all four.
+     A phone override belongs after every panel it overrides. */
+  @media (max-width:560px){
+    #panel,#vault,#journal,#inbox{width:100vw;border-left:none;padding: 32px 20px 60px;}
+  }
   #controls button .badge{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding: 0 4px;
     border-radius:12px;background:var(--accent-2);color:var(--badge-ink);font-size:12px;font-weight:700;
     display:grid;place-items:center;line-height:1;}
@@ -351,7 +364,13 @@
   .back{display:inline-flex;align-items:center;gap: 8px;font-size:12px;color:var(--ink-dim);padding: 4px 12px 4px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);margin-bottom: 16px;cursor:pointer;}
   .back:hover{color:var(--ink);border-color:var(--line-2);}
   @media (max-width:680px){#bar{padding: 16px 16px;gap: 16px;}#legend{display:none;}#hint{display:none;}#tip{display:none!important;}.brand .eyebrow{display:none;}.stat{display:none;}.search{width:auto;flex:1;min-width:0;}#controls{bottom:20px;right:16px;}}
-  @media (prefers-reduced-motion:reduce){#panel{transition:none;}#hint{transition:none;}}
+  /* All four panels slide in on transform. Only #panel and #hint honoured this, so a reader who
+     asks for less motion still got a .4s slide from three of them — the setting was half-kept, in
+     the half nobody ever opened. (It is also what makes the render deterministic: iris asks for
+     reduced motion, and CI photographed the inbox 17px from home, mid-slide.) */
+  @media (prefers-reduced-motion:reduce){
+    #panel,#hint,#vault,#journal,#inbox{transition:none;}
+  }
 
 /* cross-tool footer — this is one of tools-for-agents' six web views */
 .xtk{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap: 12px;max-width:96vw;overflow-x:auto;padding: 4px 16px;border:1px solid rgba(255,255,255,.1);border-bottom:none;border-radius:12px 12px 0 0;background:rgba(12,13,17,.82);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1;white-space:nowrap;color:#d6dbe4;scrollbar-width:none;}
@@ -981,15 +1000,15 @@ function openVault() {
       ? "What the brain has taken in but not tied together."
       : "Nothing to tend — every note is connected, tagged and written."}</div>
     ${sec("broken_count", "Points at nothing", "A [[wikilink]] to a note that was never written. Click to write it — the link heals itself.",
-      LINT.broken, (x) => `<div class="vi write" data-write="${esc(x.target)}"><span class="vt">${esc(x.target)}</span><span class="vm">from ${esc(x.from)}</span></div>`)}
+      LINT.broken, (x) => `<div class="vi write" role="button" tabindex="0" data-write="${esc(x.target)}"><span class="vt">${esc(x.target)}</span><span class="vm">from ${esc(x.from)}</span></div>`)}
     ${sec("orphan_count", "Connected to nothing", "Nothing links to them and they link to nothing — the brain took them in and never wove them in.",
-      LINT.orphans, (x) => `<div class="vi" data-open="${esc(x.slug)}"><span class="vt">${esc(x.title)}</span><span class="vm">orphan</span></div>`)}
+      LINT.orphans, (x) => `<div class="vi" role="button" tabindex="0" data-open="${esc(x.slug)}"><span class="vt">${esc(x.title)}</span><span class="vm">orphan</span></div>`)}
     ${sec("untagged_count", "Untagged", "No tags, so they never surface by topic.",
-      LINT.untagged, (x) => `<div class="vi" data-open="${esc(x.slug)}"><span class="vt">${esc(x.title)}</span><span class="vm">untagged</span></div>`)}
+      LINT.untagged, (x) => `<div class="vi" role="button" tabindex="0" data-open="${esc(x.slug)}"><span class="vt">${esc(x.title)}</span><span class="vm">untagged</span></div>`)}
     ${sec("stub_count", "Barely written", "Under 120 characters — a title with nothing behind it.",
-      LINT.stubs, (x) => `<div class="vi" data-open="${esc(x.slug)}"><span class="vt">${esc(x.title)}</span><span class="vm">${x.chars} chars</span></div>`)}
+      LINT.stubs, (x) => `<div class="vi" role="button" tabindex="0" data-open="${esc(x.slug)}"><span class="vt">${esc(x.title)}</span><span class="vm">${x.chars} chars</span></div>`)}
     ${sec("stale_count", "Gone quiet", "Not touched in 90 days. Not a problem — just what your brain has stopped thinking about.",
-      LINT.stale, (x) => `<div class="vi" data-open="${esc(x.slug)}"><span class="vt">${esc(x.title)}</span><span class="vm">${ago(x.updated) || ""}</span></div>`)}
+      LINT.stale, (x) => `<div class="vi" role="button" tabindex="0" data-open="${esc(x.slug)}"><span class="vt">${esc(x.title)}</span><span class="vm">${ago(x.updated) || ""}</span></div>`)}
     ${(LINT.orphan_count + LINT.broken_count + LINT.untagged_count + LINT.stub_count)
       ? `<div class="vh-w">Weave the stranded ones in from the <b>inbox</b> (📥).</div>` : '<div class="clean">The vault is in good order.</div>'}`;
 }
@@ -997,11 +1016,18 @@ function closeVault() { document.getElementById("vault").classList.remove("open"
 document.getElementById("health").addEventListener("click", openVault);
 document.getElementById("health").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openVault(); } });
 document.getElementById("vx").addEventListener("click", closeVault);
-document.getElementById("vault").addEventListener("click", (e) => {
+const vaultAct = (e) => {
   const w = e.target.closest("[data-write]");
   if (w) { closeVault(); openComposer(w.dataset.write, { ghost: true }); return; }   // write the note nothing points to
   const o = e.target.closest("[data-open]");
   if (o) { closeVault(); openNote(o.dataset.open); }
+};
+document.getElementById("vault").addEventListener("click", vaultAct);
+// 16 rows here are cursor:pointer and were reachable by mouse only — the same gap wireRows() closes
+// on the graph's rows. The delegate already finds the row from the event target; Enter/Space just
+// has to arrive at it. (Rows carry role=button + tabindex=0 where they are built.)
+document.getElementById("vault").addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-open],[data-write]")) { e.preventDefault(); vaultAct(e); }
 });
 
 // ── Journal: the last leg of the loop ───────────────────────────────────────
@@ -1148,7 +1174,7 @@ function itemHtml(it) {
   const tags = it.suggested_tags.map(s => `<button class="sg" data-tag="${esc(s.tag)}" data-slug="${esc(it.slug)}">#${esc(s.tag)}</button>`).join("");
   const links = it.suggested_links.map(s => `<button class="sg" data-link="${esc(s.slug)}" data-slug="${esc(it.slug)}">${esc(s.title)}</button>`).join("");
   return `<div class="ibx" data-item="${esc(it.slug)}">
-    <div class="t" data-open="${esc(it.slug)}">${esc(it.title)}</div>
+    <div class="t" data-open="${esc(it.slug)}" role="button" tabindex="0">${esc(it.title)}</div>
     <div class="why">${it.issues.map(i => `<span class="iss ${esc(i)}">${esc(i)}</span>`).join("")}</div>
     ${tags ? `<div class="lbl">tags its neighbours carry</div><div class="row">${tags}</div>` : ""}
     ${links ? `<div class="lbl">notes it resembles</div><div class="row">${links}</div>` : ""}
@@ -1166,6 +1192,12 @@ function syncWeaveBtn(slug) {
     : `weave in — ${[pick.tags.size && `${pick.tags.size} tag${pick.tags.size > 1 ? "s" : ""}`,
         pick.links.size && `${pick.links.size} link${pick.links.size > 1 ? "s" : ""}`].filter(Boolean).join(" · ")}`;
 }
+// The suggestion chips are real <button>s and always could be tabbed to. The note's TITLE — the one
+// thing you actually came here to open — was a div, on every row.
+document.getElementById("inbox").addEventListener("keydown", (e) => {
+  const t = e.target.closest("[data-open]");
+  if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); closeInbox(); openNote(t.dataset.open); }
+});
 document.getElementById("inbox").addEventListener("click", async (e) => {
   if (e.target.closest("#ix")) return closeInbox();
   const open = e.target.closest("[data-open]");
