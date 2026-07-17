@@ -97,7 +97,67 @@ jobs:
           # render it. `.solo` reaches the same --card surface with no pointer at all, and is posed
           # by nothing either. Selectors that live on a note's page are named below by iris rather
           # than passed over: look-note is where those get rendered.
-          hover: '.brand, .chip, .chip.tag, .crumb, .dot, .focus-btn, .gbtn, .hit, .j-in button, .legend-x, .lnk, .nav a, .note-x, .pill, .results .r, .row, .sbtn, .search-x, .sug, .tagpill, .tb-b, .theme-btn, .tool, .vi, .wl, .xtk a, .back, .backlink'
+          hover: '.brand, .chip, .chip.tag, .crumb, .dot, .focus-btn, .gbtn, .hit, .j-in button, .legend-x, .lnk, .nav a, .note-x, .pill, .row, .sbtn, .search-x, .sug, .tagpill, .tb-b, .theme-btn, .tool, .vi, .wl, .xtk a, .back, .backlink'
+
+  # THE SEARCH DROPDOWN — .results IS display:none UNTIL YOU TYPE, SO NOTHING HAD EVER SEEN IT.
+  #
+  # `.results .r` sat in the list above for months. It matched nothing on a page nobody had typed
+  # into, so it rendered nothing, and the gate reported clean about a state it never reached — the
+  # quiet kind of pass iris now prints a blind-spot line for (C170). Opening the door found the bug
+  # on the first render: `.r-more` at 10px, off the 4px grid this repo declares. Every door opened
+  # in this kit so far has had something behind it.
+  #
+  # The rows are NOT tabbable and must not become buttons: this is a combobox, the input keeps
+  # focus, and aria-activedescendant carries the selection. iris's unreachable-control rule asked
+  # for tabindex="0" + role="button" on all 8 — the opposite of the pattern — and was fixed to
+  # exempt a declared composite. The `pre` below pins the contract that fix relies on.
+  look-search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Serve it with notes in it, so a search can match something
+        run: |
+          CORTEX_VAULT=./vault node scripts/seed.js
+          CORTEX_VAULT=./vault node src/cli.js serve &
+          for i in $(seq 30); do curl -sf http://localhost:7800/api/stats >/dev/null && break; sleep 1; done
+          n=$(curl -sf http://localhost:7800/api/stats | node -pe "JSON.parse(require('fs').readFileSync(0)).notes ?? 0")
+          test "$n" -gt 0 || { echo "::error::notes=0 — a search would match nothing and the door would stay shut"; exit 1; }
+      - uses: tools-for-agents/iris@main
+        with:
+          url: http://localhost:7800/
+          viewports: phone,tablet,desktop
+          name: cortex-search
+          tokens: kit
+          strict: true
+          hover: '.results .r'
+          # Drive it exactly as a keyboard does, assert every announcement follows the highlight,
+          # and LEAVE THE DROPDOWN OPEN so the hover audit above has something to look at.
+          pre: |
+            const q = document.querySelector('#q'), R = document.querySelector('#results');
+            const key = (k) => q.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+            const type = async () => { q.focus(); q.value = 'a'; q.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 800)); };
+            if (q.getAttribute('aria-expanded') !== 'false') throw new Error('the combobox claims to be expanded before anything opened it');
+            await type();
+            const rows = [...R.querySelectorAll('.r')];
+            if (rows.length < 2) throw new Error('need 2+ result rows to test the keyboard, got ' + rows.length);
+            if (q.getAttribute('aria-expanded') !== 'true') throw new Error('the open dropdown does not announce aria-expanded');
+            if (q.getAttribute('aria-activedescendant') !== rows[0].id) throw new Error('aria-activedescendant does not name the first row');
+            key('ArrowDown');
+            if (!rows[1].classList.contains('sel')) throw new Error('ArrowDown did not move the highlight');
+            if (q.getAttribute('aria-activedescendant') !== rows[1].id) throw new Error('ArrowDown moved the highlight but not the announcement — they are the same fact');
+            if (rows[1].getAttribute('aria-selected') !== 'true' || rows[0].getAttribute('aria-selected') !== 'false') throw new Error('aria-selected did not follow the selection');
+            key('ArrowUp');
+            if (q.getAttribute('aria-activedescendant') !== rows[0].id) throw new Error('ArrowUp did not come back');
+            if ([...R.querySelectorAll('[aria-selected=true]')].length !== 1) throw new Error('more than one row claims to be selected');
+            key('Enter');
+            await new Promise((r) => setTimeout(r, 500));
+            if (R.classList.contains('on')) throw new Error('Enter did not close the dropdown');
+            if (q.getAttribute('aria-expanded') !== 'false') throw new Error('the closed dropdown still announces itself as expanded');
+            await type();
+            if (!R.classList.contains('on')) throw new Error('the dropdown did not reopen — there would be nothing to look at');
 
   # THE EMPTY STATE IS THE ONE STATE EVERY USER SEES FIRST — AND NOTHING WAS LOOKING AT IT.
   #
