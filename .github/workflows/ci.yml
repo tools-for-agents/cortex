@@ -171,8 +171,68 @@ jobs:
           # Open a real note the way a cross-tool deep link does, then assert the panel actually has
           # the note in it. A --pre that throws makes iris report "the state was never reached and
           # NOTHING was audited" instead of quietly grading the graph behind it.
+          #
+          # The two sleep(1500)s that used to be here were BETS: they passed on my laptop and would
+          # have failed on a loaded runner, which is exactly how C164 shipped a race into this repo.
+          # A poll waits for the note to ARRIVE and costs ~50ms when it is already there.
+          #
+          # The note page is also the only place .wl/.backlink/.xtk a/.chip.tag exist — `look` names
+          # them and reports them as never-rendered. This is where they get rendered.
+          hover: '.backlink, .wl, .xtk a, #panel .close, .chip.tag, .brand'
           pre: >-
-            await new Promise(r=>setTimeout(r,1500));const g=await (await fetch('/api/graph')).json();const n=(g.nodes||[]).find(x=>!x.ghost);if(!n) throw new Error('the seeded vault has no real notes — nothing to open');location.hash='#'+n.id;await new Promise(r=>setTimeout(r,1500));if(!document.getElementById('noteBody')?.textContent?.trim()) throw new Error('the note panel opened EMPTY — that is an empty room, not a note');
+            const until=async(f,ms=8000)=>{const t=Date.now()+ms;while(Date.now()<t){if(f())return true;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for the note to arrive');};await until(()=>document.querySelectorAll('#legend .row').length>0);const g=await (await fetch('/api/graph')).json();const n=(g.nodes||[]).find(x=>!x.ghost);if(!n) throw new Error('the seeded vault has no real notes — nothing to open');location.hash='#'+n.id;await until(()=>document.getElementById('noteBody')?.textContent?.trim());
+
+  # ── THE PANELS NOBODY EVER OPENED ─────────────────────────────────────────────
+  # `look` audits the graph. It also NAMES .ibx/.vi/.results selectors it can never reach from
+  # there and reports them as blind — "13 of 28 --hover selectors matched NOTHING here". I read
+  # that line for weeks as a formality. It was an inventory of unaudited UI.
+  #
+  # Behind those four buttons: an ORPHAN badge at 1.94:1 on light — not a near-miss, invisible —
+  # because #f0a35e was hardcoded against the dark card (8.3:1) and so had no light theme to fail
+  # in. The node-ink comment at the top of index.html had already written this lesson down after
+  # three of five node colours failed on white. One line skipped it. And --ink-faint on .ibx/.vi's
+  # --card read 4.43:1 on 20 more elements — the same pairing, the same number, as the legend count.
+  #
+  # A gate that stops at the doorway grades the room it is standing in and calls the house clean.
+  look-panels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Serve it, THEN prove the panels have something in them
+        run: |
+          CORTEX_VAULT=./vault node scripts/seed.js
+          CORTEX_VAULT=./vault node src/cli.js serve &
+          for i in $(seq 30); do curl -sf http://localhost:7800/api/stats >/dev/null && break; sleep 1; done
+          n=$(curl -sf http://localhost:7800/api/stats | node -pe "JSON.parse(require('fs').readFileSync(0)).notes ?? 0")
+          echo "on the page: notes=$n"
+          test "$n" -gt 0 || { echo "::error::notes=0 — the panels would open EMPTY, which is an empty room"; exit 1; }
+      # The inbox: opened the way a user opens it — by pressing the button. Every wait here is a
+      # poll for the thing to ARRIVE, not a sleep betting on how long a loaded runner takes (C164:
+      # iris photographed a frame nobody was meant to read, because --pre waited for .hit to EXIST).
+      - uses: tools-for-agents/iris@main
+        with:
+          url: http://localhost:7800/
+          viewports: phone,tablet,desktop
+          name: cortex-inbox
+          tokens: kit
+          strict: true
+          hover: '.ibx .t, .ibx .sg, .ibx .weave, #inbox .close'
+          pre: >-
+            const until=async(f,ms=8000)=>{const t=Date.now()+ms;while(Date.now()<t){if(f())return true;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for the inbox to arrive');};await until(()=>document.querySelectorAll('#legend .row').length>0);document.getElementById('inboxBtn').click();await until(()=>document.getElementById('inbox').classList.contains('open'));await until(()=>document.querySelectorAll('.ibx .t').length>0);
+      # The vault: #health opens it. 16 rows of --ink-faint on --card lived in here.
+      - uses: tools-for-agents/iris@main
+        with:
+          url: http://localhost:7800/
+          viewports: phone,tablet,desktop
+          name: cortex-vault
+          tokens: kit
+          strict: true
+          hover: '.vi, #vault .close, #health'
+          pre: >-
+            const until=async(f,ms=8000)=>{const t=Date.now()+ms;while(Date.now()<t){if(f())return true;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for the vault to arrive');};await until(()=>document.querySelectorAll('#legend .row').length>0);document.getElementById('health').click();await until(()=>document.getElementById('vault').classList.contains('open'));await until(()=>document.querySelectorAll('.vi').length>0);
 
   # ── THE STATES NOTHING EVER RENDERED ──────────────────────────────────────────
   # `test` proves the logic. `look` renders the page WORKING. `first-run` renders it

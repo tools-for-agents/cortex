@@ -193,13 +193,23 @@ test('the quiet inks are either an honest alias or genuinely distinguishable —
   }
 });
 
-// 🔑 ONLY THE SURFACES THE INK ACTUALLY LANDS ON.
-// A full ink × surface matrix over-asserts: it flagged --ink-faint on --card (4.43) and --bg-2 (4.31),
-// and BOTH pairs are imaginary — measured in the browser, --ink-faint only ever sits on --bg, --panel
-// (translucent) and --panel-solid, where it reads 5.12 / 4.84 / 4.81 (dark) and 4.60 / 4.86 / 4.93
-// (light). Asserting a pair that never occurs is how you end up "fixing" a colour nobody can see, and
-// half of scout's matrix was hypothetical the same way. The translucent --panel is left to iris, which
-// composites it for real; a static test cannot.
+// 🔑 ONLY THE SURFACES THE INK ACTUALLY LANDS ON — AND I MEASURED "ACTUALLY" WITH THE PANELS SHUT.
+//
+// This comment used to say --ink-faint on --card (4.43) was IMAGINARY, on the strength of measuring
+// the real page in a real browser. The measurement was honest and the conclusion was false: I measured
+// the graph, and every surface that pairs --ink-faint with --card is behind a button — the inbox's
+// .iss/.lbl and the vault's .vm, 20 elements, at exactly the 4.43 written off here. The legend count
+// was a 21st, found by hand. The blind spot did not just hide the bug; it produced the evidence that
+// this check was unnecessary, and the check was removed, and the bug shipped through the hole twice.
+//
+// So the pair is not hypothetical and never was. The sites now use --ink-dim on --card (6.10 dark /
+// 5.74 light), which is still a step quieter than the label — all "faint" was ever asking for.
+//
+// The guard is not a bigger matrix here: a static test cannot know which surface an element sits on,
+// which is the mistake in both directions. It is `look-panels` in CI, which OPENS the panels and
+// measures the composite for real. If --ink-faint lands on --card again, that gate reads 4.43 and
+// fails. (--bg-2 was the other "imaginary" pair; it reads 4.91 today. Left out because nothing pairs
+// them — a claim now checked by a gate that opens the doors, not by this comment.)
 const OPAQUE_SURFACES_IN_USE = ['bg', 'panel-solid'];
 
 test('every quiet ink clears AA on the opaque surfaces it is measured on', () => {
