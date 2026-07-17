@@ -409,7 +409,7 @@ export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
   const args = [SNIPPET_MAX, m];
   if (type) { sql += ' AND n.type=?'; args.push(type); }
   if (tag) { sql += " AND n.tags LIKE ? ESCAPE '\\'"; args.push(tagLike(tag)); }
-  sql += ' ORDER BY score LIMIT ?'; args.push(Math.max(k * 3, 20));
+  sql += ' ORDER BY score, slug ASC LIMIT ?'; args.push(Math.max(k * 3, 20));
   let rows; try { rows = all(sql, ...args); } catch (e) { return { query, error: e.message, results: [] }; }
 
   const results = [];
@@ -496,7 +496,7 @@ export function suggest(query, { k = 8 } = {}) {
   const m = terms.map((t) => `"${t}"`).join(' OR ');
   const rows = all(`SELECT nn.slug, nn.title, nn.type, bm25(notes_fts) AS score
                     FROM notes_fts JOIN notes nn ON nn.slug = notes_fts.slug
-                    WHERE notes_fts MATCH ? ORDER BY score LIMIT ?`, m, k * 4);
+                    WHERE notes_fts MATCH ? ORDER BY score, slug ASC LIMIT ?`, m, k * 4);
   const suggestions = [];
   for (const r of rows) {
     if (connected.has(r.slug)) continue;
@@ -523,7 +523,7 @@ export function triage({ limit = 12, stub_chars = 120 } = {}) {
   const rows = all(`SELECT slug, title, type, updated, tags, LENGTH(body) AS chars,
     (slug NOT IN (SELECT src FROM links)
      AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)) AS orphan
-    FROM notes ORDER BY updated DESC`);
+    FROM notes ORDER BY updated DESC, slug ASC`);
 
   let needing = 0;              // notes that ACTUALLY have an issue — the whole backlog, not the shown page
   const items = [];
@@ -584,7 +584,7 @@ export function lint({ stub_chars = 120, stale_days = 0 } = {}) {
   stale_days = Number.isFinite(+stale_days) && +stale_days > 0 ? Math.min(Math.floor(+stale_days), MAX_STALE_DAYS) : 0;
   const orphans = all(`SELECT slug,title FROM notes
     WHERE slug NOT IN (SELECT src FROM links) AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)
-    ORDER BY updated DESC`);
+    ORDER BY updated DESC, slug ASC`);
   // An unresolved link is not automatically a BROKEN one. If two notes answer to the name,
   // the target does not fail to exist — it exists twice. Calling that "broken" tells you to
   // go and write the note, and the note is already there. Twice.
@@ -596,7 +596,7 @@ export function lint({ stub_chars = 120, stale_days = 0 } = {}) {
     if (hits.length > 1) ambiguous_links.push({ from: titleOf(r.src), target: r.target, means: hits });
     else broken.push({ from: titleOf(r.src), target: r.target });
   }
-  const untagged = all(`SELECT slug,title FROM notes WHERE tags='[]' OR tags IS NULL ORDER BY updated DESC`);
+  const untagged = all(`SELECT slug,title FROM notes WHERE tags='[]' OR tags IS NULL ORDER BY updated DESC, slug ASC`);
   const stubs = all('SELECT slug,title,LENGTH(body) AS len FROM notes WHERE LENGTH(body) < ? ORDER BY len', stub_chars)
     .map((r) => ({ slug: r.slug, title: r.title, chars: r.len }));
   const report = {
@@ -609,7 +609,7 @@ export function lint({ stub_chars = 120, stale_days = 0 } = {}) {
   };
   if (stale_days > 0) {
     const cutoff = new Date(Date.now() - stale_days * 864e5).toISOString();
-    const stale = all('SELECT slug,title,updated FROM notes WHERE updated < ? ORDER BY updated', cutoff);
+    const stale = all('SELECT slug,title,updated FROM notes WHERE updated < ? ORDER BY updated, slug ASC', cutoff);
     report.stale_count = stale.length; report.stale = stale.slice(0, 30);
   }
   return report;
@@ -627,7 +627,7 @@ export function tags() {
 }
 
 export function tagged(tag) {
-  const rows = all("SELECT slug,title,type FROM notes WHERE tags LIKE ? ESCAPE '\\' ORDER BY updated DESC", tagLike(tag));
+  const rows = all("SELECT slug,title,type FROM notes WHERE tags LIKE ? ESCAPE '\\' ORDER BY updated DESC, slug ASC", tagLike(tag));
   return { tag, count: rows.length, notes: rows };
 }
 
@@ -635,7 +635,7 @@ export function tagged(tag) {
 export function graph() {
   const orphanRows = all(`SELECT slug,title,type FROM notes
     WHERE slug NOT IN (SELECT src FROM links) AND slug NOT IN (SELECT dst FROM links WHERE dst IS NOT NULL)
-    ORDER BY updated DESC`);
+    ORDER BY updated DESC, slug ASC`);
   const broken = all('SELECT src,target FROM links WHERE dst IS NULL ORDER BY target')
     .map((r) => ({ from: titleOf(r.src), target: r.target }));
   return {
@@ -651,9 +651,16 @@ export function graph() {
   };
 }
 
+// 🔑 `updated` IS NOT UNIQUE, SO ORDER BY IT ALONE IS NOT A DEFINED ORDER. It comes from the
+// note file's mtime — SECOND resolution — so a batch that touches many files at once (a git
+// checkout, a bulk write, a sync) gives them all the same `updated`, and on a tie SQLite returns
+// rowid order. Re-sync the vault and the rows are re-inserted in a different order, so a list of
+// tied notes silently rearranges though nothing changed. Every ordering here tie-breaks on slug,
+// the primary key: unique (so the order is fully determined) and stable across a re-sync (which
+// rowid is not). Same fix as scout's fetched_at; the same latent bug lived in both.
 export function recent({ k = 15 } = {}) {
   k = posInt(k, 15, 500);
-  return { notes: all('SELECT slug,title,type,updated FROM notes ORDER BY updated DESC LIMIT ?', k) };
+  return { notes: all('SELECT slug,title,type,updated FROM notes ORDER BY updated DESC, slug ASC LIMIT ?', k) };
 }
 
 // ── graph data for the web view (nodes sized by backlink count) ───────────────
