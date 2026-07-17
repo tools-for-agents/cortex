@@ -318,6 +318,15 @@
   .backlink:hover{background:var(--card);color:var(--ink);}
   .backlink .d{width:8px;height:8px;border-radius:50%;flex:none;box-shadow:0 0 8px currentColor;}
   .backlink .u{margin-left: auto;font-size:12px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.12em;}
+  /* 🔑 THE ROW RAISES AND THE COUNT DOES NOT COME WITH IT — and this file already knew.
+     `.backlink:hover` paints --card and lifts the label to --ink; `.u` stayed --ink-faint,
+     which on --card is 4.43:1 in dark. That is the same defect, the same shape and THE SAME
+     NUMBER as the legend's rows, fixed 195 lines above this one:
+       #legend .row:hover .n, #legend .row.solo .n{color:var(--ink-dim);}
+     The lesson was learned, written down, and applied to exactly one of the two places it was
+     true. (Light was 4.60:1 and passed, which is why this only ever fired in dark.)
+     --ink-dim on --card is 6.1:1. Below `.u`, on purpose: a later rule wins. */
+  .backlink:hover .u{color:var(--ink-dim);}
   .backlink .via{margin-left: auto;font-size:12px;color:var(--accent-2);white-space:nowrap;font-family:var(--mono,ui-monospace);}
 
   #tip{position:fixed;z-index:25;pointer-events:none;display:none;padding: 8px 12px;border-radius:12px;background:var(--panel-solid);border:1px solid var(--line);box-shadow:var(--shadow);white-space:nowrap;transform:translate(-50%,calc(-100% - 14px));}

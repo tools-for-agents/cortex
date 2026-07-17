@@ -334,6 +334,26 @@ jobs:
           hover: '.j-d, .j-in button, #journal .close'
           pre: >-
             const until=async(f,ms=8000)=>{const t=Date.now()+ms;while(Date.now()<t){if(f())return true;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for the journal to arrive');};await until(()=>document.querySelectorAll('#legend .row').length>0);document.getElementById('journalBtn').click();await until(()=>document.getElementById('journal').classList.contains('open'));await until(()=>document.querySelectorAll('.j-in button, .j-d').length>0);
+      # THE FIFTH DOOR, AND THE LAST ONE IN THIS REPO: the graph overview. `.stat` in the header
+      # opens it — "click the header stat to see the graph at a glance" — and nothing had ever
+      # clicked it. `.tagpill` sat in the main look gate's hover list for months, matching nothing,
+      # because it does not live on that page; it lives here, behind a control no gate pressed.
+      #
+      # Behind it: `.backlink:hover` paints --card and lifts its label to --ink, and the count
+      # beside it stayed --ink-faint — 4.43:1 in dark, on all eight rows. The same defect, the same
+      # shape and THE SAME NUMBER as the legend's rows, which were fixed 195 lines earlier in the
+      # same stylesheet. The lesson was learned, written down, and applied to one of the two places
+      # it was true.
+      - uses: tools-for-agents/iris@main
+        with:
+          url: http://localhost:7800/
+          viewports: phone,tablet,desktop
+          name: cortex-overview
+          tokens: kit
+          strict: true
+          hover: '.tagpill, .backlink, #panel .close'
+          pre: >-
+            const until=async(f,ms=9000,w='')=>{const t=Date.now()+ms;while(Date.now()<t){const v=f();if(v)return v;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for '+w);};const stat=await until(()=>document.querySelector('.stat'),9000,'the header stat');stat.click();await until(()=>document.querySelectorAll('.tagpill').length>0,9000,'the overview panel with its Top tags');
 
   # ── THE STATES NOTHING EVER RENDERED ──────────────────────────────────────────
   # `test` proves the logic. `look` renders the page WORKING. `first-run` renders it
