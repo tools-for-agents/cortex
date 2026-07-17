@@ -104,17 +104,25 @@ jobs:
           # NOTHING here". The 27 broke down as:
           #
           #   3  actually render here: .brand, .row, .xtk a  ← all this job was ever auditing
-          #   7  redundant: .chip.tag/.wl/.backlink (look-note), .vi/.j-in button (look-panels),
-          #      .brand/.xtk a — already hovered by the job that opens their door
+          #   5  redundant: .chip.tag/.wl/.backlink (look-note), .vi/.j-in button (look-panels) —
+          #      already hovered by the job that opens their door
           #   2  render on the NOTE page, so they moved there: .chip, .focus-btn
-          #   9  FICTION — .crumb, .gbtn, .legend-x, .lnk, .note-x, .sbtn, .search-x, .tb-b,
-          #      .theme-btn do not exist anywhere in public/. Not hidden, not behind a door:
-          #      they are class names from a sibling repo, copied into this list, matching
-          #      nothing in this product since the day they were pasted. Deleted.
-          #   6  real, but rendered by no state any gate reaches: .dot, .hit, .nav a, .pill,
-          #      .sug, .tagpill, .tool, .back. LEFT OUT rather than named-and-never-reached —
-          #      naming them is what made this list look like coverage. ▶ They are the next
-          #      doors: find what renders them, open it with `pre`, then put them back.
+          #  15  FICTION — .crumb, .gbtn, .legend-x, .lnk, .note-x, .sbtn, .search-x, .tb-b,
+          #      .theme-btn, .dot, .hit, .nav a, .pill, .sug, .tool. Not one of them exists in
+          #      this product: no class attribute, no CSS rule, nothing. They are class names
+          #      from sibling repos, pasted into this list, matching nothing since the day they
+          #      arrived — cortex's theme control is a <button data-act="theme"> and always was.
+          #      Deleted.
+          #   2  real, and rendered by no state any gate reaches: .tagpill (the "Top tags" panel)
+          #      and .back (the panel's back button, which needs a navigation stack two notes
+          #      deep). LEFT OUT rather than named-and-never-reached — naming them is exactly
+          #      what made this list read as coverage. ▶ These two are the next doors, and they
+          #      are the ONLY two: open them with `pre`, then put them back.
+          #
+          # 🔑 I said "9 fiction, 6 real" here an hour ago and both numbers were wrong, because
+          # `grep -rl hit public/` matches "white" and "within". A substring grep cannot answer
+          # "does this class exist" — ask for it as a class attribute or a CSS selector, or you
+          # will send the next reader hunting for doors that were never there.
           hover: '.brand, .row, .xtk a'
 
   # THE SEARCH DROPDOWN — .results IS display:none UNTIL YOU TYPE, SO NOTHING HAD EVER SEEN IT.
