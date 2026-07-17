@@ -97,7 +97,25 @@ jobs:
           # render it. `.solo` reaches the same --card surface with no pointer at all, and is posed
           # by nothing either. Selectors that live on a note's page are named below by iris rather
           # than passed over: look-note is where those get rendered.
-          hover: '.brand, .chip, .chip.tag, .crumb, .dot, .focus-btn, .gbtn, .hit, .j-in button, .legend-x, .lnk, .nav a, .note-x, .pill, .row, .sbtn, .search-x, .sug, .tagpill, .tb-b, .theme-btn, .tool, .vi, .wl, .xtk a, .back, .backlink'
+          # 🔑 THIS LIST NAMED 27 STATES AND RENDERED 3. A LIST THAT NAMES MORE THAN THE VIEW SHOWS
+          # LIES, AND IT LIES IN THE DIRECTION OF "CLEAN".
+          #
+          # Measured, not guessed — iris's own blind-spot line: "24 of 27 --hover selectors matched
+          # NOTHING here". The 27 broke down as:
+          #
+          #   3  actually render here: .brand, .row, .xtk a  ← all this job was ever auditing
+          #   7  redundant: .chip.tag/.wl/.backlink (look-note), .vi/.j-in button (look-panels),
+          #      .brand/.xtk a — already hovered by the job that opens their door
+          #   2  render on the NOTE page, so they moved there: .chip, .focus-btn
+          #   9  FICTION — .crumb, .gbtn, .legend-x, .lnk, .note-x, .sbtn, .search-x, .tb-b,
+          #      .theme-btn do not exist anywhere in public/. Not hidden, not behind a door:
+          #      they are class names from a sibling repo, copied into this list, matching
+          #      nothing in this product since the day they were pasted. Deleted.
+          #   6  real, but rendered by no state any gate reaches: .dot, .hit, .nav a, .pill,
+          #      .sug, .tagpill, .tool, .back. LEFT OUT rather than named-and-never-reached —
+          #      naming them is what made this list look like coverage. ▶ They are the next
+          #      doors: find what renders them, open it with `pre`, then put them back.
+          hover: '.brand, .row, .xtk a'
 
   # THE SEARCH DROPDOWN — .results IS display:none UNTIL YOU TYPE, SO NOTHING HAD EVER SEEN IT.
   #
@@ -238,7 +256,9 @@ jobs:
           #
           # The note page is also the only place .wl/.backlink/.xtk a/.chip.tag exist — `look` names
           # them and reports them as never-rendered. This is where they get rendered.
-          hover: '.backlink, .wl, .xtk a, #panel .close, .chip.tag, .brand'
+          # .chip and .focus-btn were named by the main `look` job, where they render nothing.
+          # They render HERE, with the note open — measured, not assumed.
+          hover: '.backlink, .wl, .xtk a, #panel .close, .chip.tag, .brand, .chip, .focus-btn'
           pre: >-
             const until=async(f,ms=8000)=>{const t=Date.now()+ms;while(Date.now()<t){if(f())return true;await new Promise(r=>setTimeout(r,50));}throw new Error('timed out waiting for the note to arrive');};await until(()=>document.querySelectorAll('#legend .row').length>0);const g=await (await fetch('/api/graph')).json();const n=(g.nodes||[]).find(x=>!x.ghost);if(!n) throw new Error('the seeded vault has no real notes — nothing to open');location.hash='#'+n.id;await until(()=>document.getElementById('noteBody')?.textContent?.trim());
 
