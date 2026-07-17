@@ -409,7 +409,7 @@ export function search(query, { k = 8, max_tokens = 1800, tag, type } = {}) {
   const args = [SNIPPET_MAX, m];
   if (type) { sql += ' AND n.type=?'; args.push(type); }
   if (tag) { sql += " AND n.tags LIKE ? ESCAPE '\\'"; args.push(tagLike(tag)); }
-  sql += ' ORDER BY score, slug ASC LIMIT ?'; args.push(Math.max(k * 3, 20));
+  sql += ' ORDER BY score, n.slug ASC LIMIT ?'; args.push(Math.max(k * 3, 20));
   let rows; try { rows = all(sql, ...args); } catch (e) { return { query, error: e.message, results: [] }; }
 
   const results = [];
@@ -496,7 +496,7 @@ export function suggest(query, { k = 8 } = {}) {
   const m = terms.map((t) => `"${t}"`).join(' OR ');
   const rows = all(`SELECT nn.slug, nn.title, nn.type, bm25(notes_fts) AS score
                     FROM notes_fts JOIN notes nn ON nn.slug = notes_fts.slug
-                    WHERE notes_fts MATCH ? ORDER BY score, slug ASC LIMIT ?`, m, k * 4);
+                    WHERE notes_fts MATCH ? ORDER BY score, nn.slug ASC LIMIT ?`, m, k * 4);
   const suggestions = [];
   for (const r of rows) {
     if (connected.has(r.slug)) continue;
