@@ -230,15 +230,113 @@ function writeAtomic(abs, text) {
   }
 }
 
+// WHICH of resolveSlug's four rules matched — checked in its order, against the owner's own row.
+// The refusal below says why the name is taken, and a reason has to be TRUE: it used to read
+// "whose filename is not its title", which for an ALIAS clash (or a case-different title) is a
+// flat lie about a file the agent can go and look at. When none of the rules can be re-derived
+// here, say nothing specific rather than guess — a vague reason costs a sentence, a false one
+// costs the agent's next decision.
+function nameMatchedBy(name, owner, row) {
+  const q = String(name), s = slugify(q);
+  if (owner === q || owner === s) return 'matches its slug';
+  if (row.path && (baseOf(row.path) === q || baseOf(row.path) === s)) return 'matches its filename';
+  if (String(row.title ?? '').toLowerCase() === q.toLowerCase()) return 'matches its title';
+  const alias = JSON.parse(row.aliases || '[]').find((a) => slugify(a) === s);
+  if (alias !== undefined) return `matches its alias "${alias}"`;
+  return 'resolves to it';
+}
+
+// A NAME THAT ALREADY MEANS A NOTE IS NOT A FREE NAME. `existing` is keyed by slugify(title)
+// alone, so a note whose file is not named after its title is invisible to it — and creating a
+// second note under that name makes the first one unreachable BY NAME (the new slug wins in
+// resolveSlug) and turns every [[link]] to it ambiguous. Refuse, and name the slug to pass.
+function nameMustBeFree(title) {
+  let owner;
+  try {
+    owner = resolveSlug(title);
+  } catch (e) {                       // the name already means TWO notes — a third is not the fix
+    throw new Error(`cannot create "${title}": ${e.message} `
+      + `Pass the slug of the one you meant (\`cortex write --slug <slug>\`), or use a distinct title.`);
+  }
+  if (!owner) return;                 // free — an ordinary create
+  const o = get('SELECT path, title, aliases FROM notes WHERE slug=?', owner);
+  throw new Error(`cannot create "${title}": that name already means the note "${owner}" (${o?.path}) — `
+    + `it ${nameMatchedBy(title, owner, o || {})}. A second note under one name shadows the first: `
+    + `cortex_read "${title}" would stop answering with it and every [[${title}]] would go ambiguous. `
+    + `NOTHING was written. To add to that note: \`cortex write "${title}" --slug ${owner} --append\` `
+    + `(MCP: cortex_write with "slug": "${owner}") — it keeps its own title. To keep both, give this one `
+    + `a distinct title.`);
+}
+
 // The read (`existing`) and the write MUST be one critical section: without it, two agents appending
 // to the same note both read the old body and the second silently overwrites the first. See
 // withWriteLock in db.js — 4 agents lost 27 of 40 lines, and every call said it worked.
 export function write(title, opts = {}) { return withWriteLock(() => writeLocked(title, opts)); }
 
-function writeLocked(title, { body = '', type, tags, aliases, append = false } = {}) {
+// ── AND IT MUST NEVER WRITE A TWIN OF THE NOTE IT WAS ASKED FOR ───────────────
+//
+// write() keyed its target on `slugify(title)` and nothing else. Every READER in cortex —
+// read(), linksOf(), weave(), [[wikilinks]], resolveSlug() — uses a strictly stronger rule:
+// slug · filename · title · alias. Where the weak rule misses and the strong one hits, the
+// intended UPDATE silently became a CREATE.
+//
+// That is not an exotic vault, it is an ORDINARY one: a short filename under a longer
+// frontmatter title (concepts/backprop.md titled "Backpropagation"), a Zettelkasten
+// 202609211430.md, a renamed file, or one of cortex's own path-keyed notes (projects/roadmap).
+// Obsidian compatibility is the promise, and this broke on exactly the notes Obsidian makes.
+//
+// What the caller got back was `action: "created"`, no error — while
+//   · the note they named sat byte-for-byte untouched (weave adopted no tags, wrote no
+//     Related line: the maintenance loop repaired nothing),
+//   · an empty stub appeared wearing that note's title,
+//   · every [[wikilink]] that used to resolve to the real note went AMBIGUOUS, and
+//   · cortex_read of that title then handed back the empty stub instead of the knowledge.
+// Run the documented loop (cortex_triage → cortex_weave) over an inbox of 12 and it
+// manufactures 12 duplicates, severs the links into them, and reports 12 successes — and
+// because each pass RAISES the backlog, a maintenance cron compounds it every tick.
+//
+// Two doors, both shut here:
+//   `slug`  — a caller that has already RESOLVED the note (weave, capture, daily, or an agent
+//             passing the slug cortex_read just gave it) says which note it means. A miss is a
+//             hard error: a write that cannot find its target must stop, never invent a file.
+//   the name guard — an unqualified write whose name ALREADY BELONGS to another note refuses
+//             instead of quietly shadowing it (via `slug` it cannot: see below, the note keeps
+//             its own title, so no second note can come to answer to one name through it).
+//
+// ── AND `slug` SAYS WHICH NOTE, NEVER WHAT IT IS CALLED ──────────────────────
+//
+// The first cut of this fix opened the same wound from the other side. `fm.title` was written
+// unconditionally, so once `slug` decoupled "which note" from "the name I looked it up by",
+// the title argument became a SILENT RENAME of whatever note the slug pointed at — and the
+// damage was the reported defect's, exactly: a [[wikilink]] that used to resolve went broken,
+// cortex_read of the old title answered "no note matches", lint counts rose, and the call
+// returned action:"updated" with no error.
+//
+// It took no caller mistake at all. capture() looks its note up BY NAME — slug · filename ·
+// title · alias — so `cortex capture … --title NN`, NN being an alias of "Neural Networks",
+// retitled that note to "NN" and severed every [[Neural Networks]] in the vault. And the name
+// guard's own refusal text prints `cortex write "<name>" --slug <owner> --append` as the
+// remedy: following it renamed the owner to the name you had just been told you could not use.
+//
+// So: when `slug` picks the note, the note KEEPS ITS TITLE. The title argument is then a lookup
+// name (that is what weave, capture and daily pass), never a rename, and the result reports the
+// note's real title — plus a `warning` when the two differ, because "I wrote something other
+// than the name you gave me" is precisely the thing a caller must not have to infer.
+// (Renaming through the title door — a title that slugifies to the note's own slug — is
+// untouched: that is how a title's spelling has always been corrected.)
+function writeLocked(title, { body = '', type, tags, aliases, append = false, slug: target } = {}) {
   if (!title || !String(title).trim()) throw new Error('title is required');
-  const slug = slugify(title);
+  const slug = target ? String(target) : slugify(title);
   const existing = get('SELECT * FROM notes WHERE slug=?', slug);
+  if (target && !existing) {
+    throw new Error(`cannot edit the note "${target}": no note with that slug is indexed in ${VAULT}. `
+      + `NOTHING was written — a write told which note to edit does not create a second one instead. `
+      + `If the vault changed on disk, run \`cortex sync\` (MCP: cortex_sync) and retry; `
+      + `\`cortex search "${title}"\` finds the slug this note actually has.`);
+  }
+  if (!existing) nameMustBeFree(title);
+  // The note the SLUG picked keeps its own title — the argument was the name it was looked up by.
+  const finalTitle = target && existing ? (existing.title || String(title)) : String(title);
   const finalType = type || existing?.type || 'note';
   const rel = existing?.path || join(dirForType(finalType), `${slug}.md`);
   const abs = join(VAULT, rel);
@@ -265,7 +363,7 @@ function writeLocked(title, { body = '', type, tags, aliases, append = false } =
   if (existing && append) newBody = (existing.body ? `${existing.body}\n\n` : '') + body;
   else if (existing && !body) newBody = existing.body;
 
-  const fm = { title: String(title), type: finalType };
+  const fm = { title: finalTitle, type: finalType };
   const t = mergeList(tags, existing ? JSON.parse(existing.tags || '[]') : [], append)
     .filter((x) => !parseTags(newBody).includes(x)); // don't duplicate inline #tags into frontmatter
   const al = mergeList(aliases, existing ? JSON.parse(existing.aliases || '[]') : [], append);
@@ -283,8 +381,27 @@ function writeLocked(title, { body = '', type, tags, aliases, append = false } =
   // is still holding the short slug. Re-key the vault so both stay reachable, and report the
   // slug this note actually got, not the one we hoped for.
   if (actual !== slug) sync(); else rebuildLinks();
-  return { slug: actual, path: rel, title: String(title), type: finalType,
+  const r = { slug: actual, path: rel, title: finalTitle, type: finalType,
     action: existing ? 'updated' : 'created', links: parseLinks(newBody).length };
+  // The cases where what landed on disk is not what the caller's own words said. Say them in the
+  // result, in the same breath as the success — a caller that has to compare its arguments against
+  // the fields to find out is a caller that will not.
+  const warn = [];
+  if (finalTitle !== String(title)) {
+    warn.push(`"${title}" was the NAME this note was looked up by, not a rename: "${actual}" keeps `
+      + `its own title "${finalTitle}". Writing by slug edits a note, it never retitles it (that would `
+      + `break every [[${finalTitle}]] in the vault). To retitle, edit the note's frontmatter and run \`cortex sync\`.`);
+  }
+  // Retyping a note you reached BY SLUG is the same silent-mutation shape one field over: daily()
+  // pins type 'daily' so journal() (WHERE type='daily') can still find the day, which on a note that
+  // was something else rewrites a field nobody asked about. The file does not move — `rel` is the
+  // note's own path — but the frontmatter changed, so it is said out loud rather than discovered.
+  if (target && existing && finalType !== existing.type) {
+    warn.push(`This note was typed "${existing.type}" and is now "${finalType}" (the file stays at `
+      + `${rel} — type only moves a note when one is CREATED). Pass no type to leave it as it was.`);
+  }
+  if (warn.length) r.warning = warn.join(' ');
+  return r;
 }
 
 // ── capture raw material into the source inbox (agent distils it later) ────────
@@ -296,7 +413,14 @@ function captureLocked(text, { title, source } = {}) {
   const t = title || (source ? `Source — ${source}` : String(text).trim().split('\n')[0].slice(0, 60)) || 'Captured';
   const header = source ? `> source: ${source}\n> captured: ${nowISO()}\n\n` : '';
   const exists = resolveSlug(t);
-  return write(t, { type: 'source', append: !!exists, body: exists ? text : header + text });
+  // `exists` is the note this capture belongs to, resolved by NAME (slug · filename · title ·
+  // alias). Hand write() that slug — handing it the title alone re-keys on slugify(title) and
+  // appends into a NEW stub instead. `t` stays the lookup NAME and write() treats it as one: a
+  // capture titled with a note's ALIAS ("NN") must land in that note, not retitle it to "NN" and
+  // break every [[Neural Networks]] in the vault. Its type is likewise only ours to set when we
+  // are creating it: an append must not retype the note it lands in.
+  return write(t, { slug: exists || undefined, type: exists ? undefined : 'source',
+    append: !!exists, body: exists ? text : header + text });
 }
 
 // ── read a note ────────────────────────────────────────────────────────────────
@@ -565,7 +689,9 @@ export function weave(query, { tags = [], links = [] } = {}) {
   const titles = links.map((l) => titleOf(l) || l).filter(Boolean);
   const body = titles.length ? `Related: ${titles.map((t) => `[[${t}]]`).join(' · ')}` : '';
   if (!tags.length && !titles.length) throw new Error('nothing to weave — pass tags and/or links');
-  return write(n.title, { tags, body, append: true });   // append merges tags and keeps the body
+  // `slug`, not just `n.title`: this note was resolved by requireSlug, and re-keying it on
+  // slugify(title) inside write() is what left the real note untouched and created a stub.
+  return write(n.title, { slug, tags, body, append: true });   // append merges tags and keeps the body
 }
 
 // A "stale" horizon of a century is beyond any real vault — and it keeps stale_days × a day of ms
@@ -697,7 +823,15 @@ function dailyLocked(text) {
   const line = `- ${stamp} — ${String(text).trim()}`;
   const slug = resolveSlug(d);
   const body = slug ? `${get('SELECT body FROM notes WHERE slug=?', slug)?.body ?? ''}\n${line}` : `# ${d}\n\n${line}`;
-  return write(d, { type: 'daily', body });
+  // The body above was READ from `slug`; it must be written BACK to `slug`. Keyed on
+  // slugify(d) instead, a day whose note answers to another slug had its journal copied into a
+  // fresh file and the day's real note left behind. The type stays pinned to 'daily' either way:
+  // journal() selects WHERE type='daily', so a day that is not typed is a day the journal loses —
+  // an entry written and then invisible is the failure this kit is built against. `d` is a lookup
+  // NAME, so a day note that carries a human title keeps it, and write() says in `warning` when a
+  // note that was typed something else has been taken over as the day. Both beat the old behaviour,
+  // which COPIED that note's whole body into a second file and left the original behind.
+  return write(d, { slug: slug || undefined, type: 'daily', body });
 }
 
 // The journal, read back. daily() could write a day's entries and nothing could

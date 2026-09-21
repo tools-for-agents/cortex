@@ -192,6 +192,30 @@ const CANARIES = [
     into: '    + esc(p).split(/(\\[\\[[^\\]]+\\]\\])/g).map((seg) => {',
   },
   {
+    why: 'a WEAVE must edit the note it RESOLVED — handing write() the title instead re-keys on slugify(title), so for any note whose filename is not its title (every Obsidian vault, and this repo\'s own seed) the maintenance loop left the note untouched, created an empty twin, reported "created" as success, and unresolved every [[wikilink]] that pointed at it',
+    file: 'src/core.js',
+    find: '  return write(n.title, { slug, tags, body, append: true });   // append merges tags and keeps the body',
+    into: '  return write(n.title, { tags, body, append: true });   // append merges tags and keeps the body',
+  },
+  {
+    why: 'a write TOLD which note to edit must STOP when that note is not there — without the refusal a missed lookup becomes a brand-new file, which is the whole shape of the weave defect: a failure reported as a successful "created"',
+    file: 'src/core.js',
+    find: '  if (target && !existing) {',
+    into: '  if (false) {',
+  },
+  {
+    why: 'a name that already means a note is not a free name — without the guard, writing by a title whose note is filed under another slug creates a SECOND note under one name: it shadows the first in resolveSlug, makes every [[link]] to it ambiguous, and cortex_read of that title returns the new empty one',
+    file: 'src/core.js',
+    find: '  if (!existing) nameMustBeFree(title);',
+    into: '  if (false) nameMustBeFree(title);',
+  },
+  {
+    why: 'the slug says WHICH note, never what it is called — writing the title argument onto the note a slug picked turns every by-slug write into a silent RENAME, which is the weave defect inside out: `cortex capture --title NN` (an ALIAS) retitled the note to "NN", a [[wikilink]] that resolved went broken, cortex_read of the real title answered "no note matches", and the call still returned action:"updated"',
+    file: 'src/core.js',
+    find: '  const finalTitle = target && existing ? (existing.title || String(title)) : String(title);',
+    into: '  const finalTitle = String(title);',
+  },
+  {
     why: "graphData's backlink tally is keyed by note SLUG, so a plain {} makes an orphan slugged 'constructor' read Object.prototype's function as its degree — truthy, so `|| 0` never fires — and it JSON-drops to undefined, losing the number that sizes the node in the web view",
     file: 'src/core.js',
     find: '  const deg = Object.create(null);',

@@ -1325,6 +1325,247 @@ test('a note type cannot be a hidden dot-folder — the note would silently vani
     'a dot in the MIDDLE of a type is fine — only a LEADING dot (a hidden dir) is refused');
 });
 
+// ── THE MAINTENANCE LOOP WAS MAKING THE VAULT WORSE AND REPORTING SUCCESS ────
+//
+// weave() resolved the note it was asked for and then handed write() that note's TITLE — and
+// write() re-keys a title with slugify(). For any note whose FILENAME IS NOT ITS TITLE the two
+// disagree, and that is not an exotic vault: it is every Obsidian vault (short filenames, long
+// titles, Zettelkasten ids, renamed files) and it is already true of two notes in this project's
+// own scripts/seed.js. The lookup missed, so the UPDATE became a CREATE:
+//   · the note the agent named sat byte-for-byte untouched — no tag adopted, no Related line,
+//   · an empty stub appeared wearing its title,
+//   · the [[wikilinks]] that used to resolve to it went AMBIGUOUS, and
+//   · cortex_read of that title handed back the stub instead of the knowledge.
+// It returned {"action":"created"} with no error, so the agent crossed the note off and moved on,
+// and the backlog went UP — a weave cron compounds it every tick. The one test that existed wove
+// "why-token-budgets-win", whose slug happens to equal slugify(its title), so it never came near it.
+test('weave edits the note it RESOLVED — a filename that is not the title is the NORMAL case', async () => {
+  const { mkdirSync, writeFileSync, readFileSync, existsSync } = await import('node:fs');
+  mkdirSync(join(vault, 'concepts'), { recursive: true });
+  // an ordinary Obsidian note: short filename, longer frontmatter title
+  writeFileSync(join(vault, 'concepts', 'backprop.md'),
+    '---\ntitle: Backpropagation\ntype: concept\n---\n'
+    + 'Trains a network by propagating error back through the chain rule, layer by layer — the way every modern deep model learns.\n');
+  writeFileSync(join(vault, 'concepts', 'neural-nets.md'),
+    '---\ntitle: Neural Nets\ntype: concept\ntags: [zzml]\n---\nLayers of weights, trained by [[Backpropagation]].\n');
+  cx.sync();
+  const out = () => cx.linksOf('Neural Nets', { direction: 'out' }).links.find((l) => l.target === 'Backpropagation');
+  assert.equal(out().slug, 'backprop', 'the [[wikilink]] resolves BEFORE the weave — the vault starts healthy');
+
+  const r = cx.weave('backprop', { tags: ['zzml'], links: ['neural-nets'] });
+  assert.equal(r.slug, 'backprop', 'the weave wrote the note it was ASKED for, not one named after its title');
+  assert.equal(r.path, 'concepts/backprop.md', 'at that note\'s own path');
+  assert.equal(r.action, 'updated', 'as an EDIT — a maintenance call that reports "created" has repaired nothing');
+
+  // "real edits to the file" is the README's promise, so read the FILE, not the index
+  const file = readFileSync(join(vault, 'concepts', 'backprop.md'), 'utf8');
+  assert.match(file, /tags:.*zzml/, 'the adopted tag is in the file on disk');
+  assert.match(file, /Related: \[\[Neural Nets\]\]/, 'and so is the Related line');
+  assert.match(file, /chain rule/, 'without losing the knowledge that was already there');
+
+  assert.ok(!existsSync(join(vault, 'notes', 'backpropagation.md')),
+    'and NO duplicate stub was manufactured under the title');
+  assert.equal(out().slug, 'backprop', 'the link that used to resolve still does — weaving may not break the graph');
+  assert.equal(cx.read('Backpropagation').path, 'concepts/backprop.md', 'the title still reads back the real note…');
+  assert.match(cx.read('Backpropagation').body, /chain rule/, '…with the knowledge in it, not an empty twin');
+  assert.ok(!cx.triage({ limit: 500 }).items.some((i) => i.slug === 'backprop'),
+    'and it leaves the inbox, because it was actually repaired');
+
+  // OVER-FIRE GUARD: the neighbour case — a note whose filename IS its title — weaves as it always did.
+  cx.write('Weave Neighbour', { type: 'concept',
+    body: 'A note filed under its own title, long enough not to be a stub either way, so only the weave can change its state.' });
+  const n = cx.weave('Weave Neighbour', { tags: ['zzml'], links: ['neural-nets'] });
+  assert.equal(n.slug, 'weave-neighbour', 'an ordinary note still weaves by its ordinary slug');
+  assert.equal(n.action, 'updated');
+  assert.ok(cx.read('Weave Neighbour').tags.includes('zzml'), 'and really adopted the tag');
+});
+
+// The mechanism under that defect, from the other side: a MISSED LOOKUP must never become a new
+// file. capture() and daily() re-entered write() by name in the same way weave did, and an agent
+// that reads a note and then writes it back by title reaches it with no weave at all.
+test('a write that cannot find the note it names REFUSES — it never lands as a second note', async () => {
+  const { existsSync } = await import('node:fs');
+
+  // 1. told to edit a slug that is not in the vault
+  assert.throws(() => cx.write('Backpropagation', { slug: 'zz-no-such-slug', body: 'zzlostbody' }), (e) => {
+    assert.match(e.message, /zz-no-such-slug/, 'the error names the slug it could not find');
+    assert.ok(e.message.includes(vault), 'and WHERE it looked for it');
+    assert.match(e.message, /cortex sync/, 'and the command that fixes a stale index');
+    return true;
+  });
+  assert.equal(cx.search('zzlostbody').count, 0, 'and nothing was written — not under that name, not under any');
+
+  // 2. an unqualified write whose NAME already belongs to a note filed under another slug
+  assert.throws(() => cx.write('Backpropagation', { body: 'zztwinbody', append: true }), (e) => {
+    assert.match(e.message, /backprop/, 'the refusal names the note that already holds the name');
+    assert.match(e.message, /--slug backprop|"slug":"backprop"/, 'and how to edit THAT note instead');
+    return true;
+  });
+  assert.ok(!existsSync(join(vault, 'notes', 'backpropagation.md')), 'no twin on disk');
+  assert.equal(cx.search('zztwinbody').count, 0, 'none in the index either');
+  assert.equal(cx.read('Backpropagation').slug, 'backprop', 'and the name still means the note it always meant');
+
+  // 3. the cure the message names actually works
+  const fixed = cx.write('Backpropagation', { slug: 'backprop', body: 'zztwinbody', append: true });
+  assert.equal(fixed.action, 'updated');
+  assert.equal(fixed.path, 'concepts/backprop.md');
+  assert.match(cx.read('backprop').body, /chain rule/, 'appending kept what the note already held');
+
+  // 4. capture() resolves the note by name too — it must append to it, not to a stub of its title
+  const cap = cx.capture('zzcapturedraw — a passage filed into the note that already owns this name.',
+    { title: 'Backpropagation' });
+  assert.equal(cap.slug, 'backprop', 'the capture landed in the real note');
+  assert.equal(cap.action, 'updated');
+  assert.equal(cap.type, 'concept', 'and did not retype the note it appended to');
+  assert.match(cx.read('backprop').body, /chain rule/, 'nor overwrite it');
+
+  // OVER-FIRE GUARD: a genuinely new name is still an ordinary create.
+  const fresh = cx.write('Zz A Name Nothing Holds', { body: 'A plain new note under a name no other note answers to.' });
+  assert.equal(fresh.action, 'created', 'writing a new note is untouched by any of this');
+  assert.equal(fresh.slug, 'zz-a-name-nothing-holds');
+});
+
+// ── …AND THE CURE MUST NOT DO THE DISEASE BACKWARDS ─────────────────────────
+//
+// `slug` decoupled WHICH note is written from the NAME it was looked up by — and `fm.title` was
+// still written unconditionally, so the name became a silent RENAME of the note the slug picked.
+// That is the reported defect from the other side, with the same end state: a [[wikilink]] that
+// used to resolve goes broken, cortex_read of the old title answers "no note matches", lint counts
+// rise, and the call returns action:"updated" with no error.
+//
+// It needs no caller mistake. capture() resolves its note BY NAME — slug · filename · title ·
+// alias — so a capture titled with a note's ALIAS renamed that note to the alias. The name guard's
+// own refusal text printed `cortex write "<name>" --slug <owner> --append` as the remedy, and
+// following it renamed the owner to the name you had just been refused.
+test('writing BY SLUG edits that note and never renames it — the name was only the lookup', async () => {
+  const { readFileSync, existsSync, mkdirSync, writeFileSync } = await import('node:fs');
+  mkdirSync(join(vault, 'concepts'), { recursive: true });
+  // an ordinary Obsidian note: a short filename, a longer title, and a shorthand alias
+  writeFileSync(join(vault, 'concepts', 'zz-nets.md'),
+    '---\ntitle: Zz Neural Networks\ntype: concept\ntags: [zznet]\naliases: [ZzNN]\n---\n'
+    + 'Layers of weights that approximate a function, trained end to end by gradient descent.\n');
+  writeFileSync(join(vault, 'concepts', 'zz-refs.md'),
+    '---\ntitle: Zz Refs\ntype: concept\n---\nThe training story starts at [[Zz Neural Networks]].\n');
+  cx.sync();
+  const link = () => cx.linksOf('Zz Refs', { direction: 'out' }).links.find((l) => l.target === 'Zz Neural Networks');
+  const before = cx.lint();
+  assert.equal(link().slug, 'zz-nets', 'the [[wikilink]] resolves BEFORE — the vault starts healthy');
+
+  // 1. capture BY ALIAS — no caller mistake at all, this is what cortex_capture {title:"ZzNN"} does
+  const cap = cx.capture('zzcapturedalias — a passage filed into the note that answers to ZzNN.', { title: 'ZzNN' });
+  assert.equal(cap.slug, 'zz-nets', 'it landed in the note the alias means');
+  assert.equal(cap.title, 'Zz Neural Networks', 'and the RESULT reports the note\'s real title, not the lookup name');
+  assert.match(readFileSync(join(vault, 'concepts', 'zz-nets.md'), 'utf8'), /^title: Zz Neural Networks$/m,
+    'the file on disk still carries its own title — "files are truth", and the truth was not overwritten');
+  assert.match(cap.warning || '', /ZzNN/,
+    'and the success says out loud that the name was a lookup, not a rename — a caller that must diff '
+    + 'its own argument against a field to learn this is a caller that will not');
+
+  assert.equal(link().slug, 'zz-nets', 'the link that used to resolve still does');
+  assert.equal(cx.read('Zz Neural Networks').slug, 'zz-nets', 'the title still reads back the note…');
+  assert.match(cx.read('zz-nets').body, /gradient descent/, '…with what it already held, plus the capture');
+  assert.match(cx.read('zz-nets').body, /zzcapturedalias/);
+  const after = cx.lint();
+  assert.equal(after.broken_count, before.broken_count, 'no link was broken by a maintenance write');
+  assert.equal(after.orphan_count, before.orphan_count, 'and nothing was orphaned');
+
+  // 2. A DIFFERENT INPUT, same mechanism: the refusal's own remedy, aimed at another note.
+  //    `cortex write "<a name that means note A>" --slug <note B> --append` used to retitle B to A,
+  //    leaving TWO notes answering to one name.
+  const crossed = cx.write('Zz Refs', { slug: 'zz-nets', append: true, body: 'zzcrossedbody' });
+  assert.equal(crossed.slug, 'zz-nets', 'the slug decided which note');
+  assert.equal(crossed.title, 'Zz Neural Networks', 'and the title argument decided nothing');
+  assert.equal(cx.read('Zz Refs').slug, 'zz-refs', 'the other note still owns its own name — no twin, no ambiguity');
+  assert.equal(cx.lint().ambiguous_count, before.ambiguous_count, 'and no [[link]] went ambiguous');
+  assert.match(cx.read('zz-nets').body, /zzcrossedbody/, 'while the body really did land in the note named by slug');
+
+  // 3. OVER-FIRE GUARD: the TITLE door still corrects a title, exactly as it always has. The fix
+  //    is "a slug write is not a rename", not "nothing may ever be retitled".
+  cx.write('Zz Renameable', { type: 'concept', body: 'A note written under its own title, to be respelled.' });
+  const respelled = cx.write('ZZ RENAMEABLE', { append: true, body: 'still the same note' });
+  assert.equal(respelled.slug, 'zz-renameable', 'same slug — the title door keys on slugify(title)');
+  assert.equal(respelled.title, 'ZZ RENAMEABLE', 'and the new spelling took');
+  assert.equal(respelled.warning, undefined, 'a deliberate retitle is not warned about');
+  assert.equal(cx.read('zz-renameable').title, 'ZZ RENAMEABLE');
+  assert.ok(!existsSync(join(vault, 'notes', 'zz-neural-networks.md')), 'and no twin was manufactured anywhere');
+});
+
+// The refusal that shuts the front door has to be TRUE about why. "whose filename is not its title"
+// was printed for every clash — and for an ALIAS clash the filename IS the title, so the one
+// sentence an agent gets to act on was a confident falsehood about a file it can go and read.
+test('the refusal names the REAL reason the name is taken — an alias is not a filename', () => {
+  cx.write('Zz Machine Learning', { type: 'concept', aliases: ['ZzML'],
+    body: 'Fitting functions to data, which is the whole of it.' });
+  assert.throws(() => cx.write('ZzML', { type: 'entity', body: 'zzmlbody' }), (e) => {
+    assert.match(e.message, /alias "ZzML"/, 'it says WHICH rule matched: the owner\'s alias');
+    assert.doesNotMatch(e.message, /filename is not its title/,
+      'and not the reason that happened to be true of the first case anyone tested — this note IS '
+      + 'filed under its title; only the alias collided');
+    assert.match(e.message, /zz-machine-learning/, 'it names the note that holds the name');
+    assert.match(e.message, /--slug zz-machine-learning/, 'and the way to add to it instead');
+    return true;
+  });
+  assert.equal(cx.search('zzmlbody').count, 0, 'and NOTHING was written');
+
+  // the remedy it prints is now safe to follow — it used to retitle the owner to "ZzML"
+  const fixed = cx.write('ZzML', { slug: 'zz-machine-learning', append: true, body: 'zzaliasappend' });
+  assert.equal(fixed.title, 'Zz Machine Learning', 'following the advice keeps the owner\'s title');
+  assert.equal(cx.read('Zz Machine Learning').slug, 'zz-machine-learning', 'so the note is still reachable by it');
+  assert.match(cx.read('zz-machine-learning').body, /zzaliasappend/);
+});
+
+// daily() pins type:'daily' so journal() (WHERE type='daily') can still find the day. Reached by
+// slug, that rewrites the type of whatever note answered to the date — a field nobody asked about,
+// on a note the caller never named. It stays (an entry the journal cannot read is the failure this
+// kit is built against, and the old behaviour was worse: it COPIED the note's whole body into a
+// second file), but it is said out loud.
+test('a type change on a note reached by slug is disclosed, and the file never moves', () => {
+  const made = cx.write('Zz Standup', { type: 'meeting', body: 'Notes from a meeting, filed as one.' });
+  assert.equal(made.path, 'meeting/zz-standup.md', 'a NEW note is filed by its type');
+
+  const retyped = cx.write('Zz Standup', { slug: 'zz-standup', type: 'daily', append: true, body: 'zzdayline' });
+  assert.equal(retyped.type, 'daily');
+  assert.equal(retyped.path, 'meeting/zz-standup.md', 'the file does not move — type only files a note at CREATE');
+  assert.match(retyped.warning || '', /typed "meeting" and is now "daily"/,
+    'and the caller is told a field it did not name has changed');
+  assert.match(cx.read('zz-standup').body, /Notes from a meeting/, 'the note kept what it held');
+
+  // OVER-FIRE GUARD: a slug write that passes no type changes nothing and warns about nothing.
+  const quiet = cx.write('Zz Standup', { slug: 'zz-standup', append: true, body: 'zzquietline' });
+  assert.equal(quiet.type, 'daily', 'the type is left exactly as it was');
+  assert.equal(quiet.warning, undefined, 'and a write that surprises nobody says nothing');
+});
+
+// POST /api/note refuses a taken name like every other door, and prints `--slug <owner>` as the way
+// through — but the route dropped `slug`, so the one remedy the error names was unreachable from the
+// browser and from any API client. An error whose only cure the caller cannot reach is half an error.
+test('serve: POST /api/note reaches the remedy its own refusal names', async () => {
+  const server = createCortexServer();
+  await new Promise((r) => server.listen(0, r));
+  const base = `http://localhost:${server.address().port}`;
+  const post = (body) => fetch(base + '/api/note', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  try {
+    cx.write('Zz Api Owner', { type: 'concept', aliases: ['ZzApiAlias'], body: 'The note that holds the name.' });
+
+    const refused = await post({ title: 'ZzApiAlias', type: 'note', body: 'zzapitwin' });
+    assert.equal(refused.status, 400, 'the name is taken, so the route refuses');
+    const err = (await refused.json()).error;
+    assert.match(err, /--slug zz-api-owner/, 'and names the slug remedy');
+
+    const r = await post({ title: 'ZzApiAlias', slug: 'zz-api-owner', append: true, body: 'zzapiappend' })
+      .then((x) => x.json());
+    assert.equal(r.slug, 'zz-api-owner', 'which the route now actually accepts');
+    assert.equal(r.title, 'Zz Api Owner', 'without renaming the note to the name it was looked up by');
+    assert.equal(r.type, 'concept',
+      'and without retyping it either — the route defaults type to "note", which for a note reached '
+      + 'by slug would have rewritten a field the caller never sent');
+    assert.match(cx.read('zz-api-owner').body, /zzapiappend/, 'the body landed in the real note');
+    assert.equal(cx.search('zzapitwin').count, 0, 'and the refused write left nothing behind');
+  } finally { server.close(); }
+});
+
 function pathToCore() {
   return new URL('../src/core.js', import.meta.url).href;
 }

@@ -83,8 +83,15 @@ export function createCortexServer() {
       if (url.pathname === '/api/note' && req.method === 'POST') {
         const body = await readBody(req);
         if (!body.title || !String(body.title).trim()) return json(res, 400, { error: 'title is required' });
+        // `slug` is the same door the CLI and MCP have, and the refusal this route can now return
+        // ("that name already means the note X … --slug X") names it: an API caller told to use a
+        // remedy it cannot reach has been given an error and no way out. With a slug, `title` is the
+        // lookup name (the note keeps its own), and the default type is NOT applied — defaulting it
+        // to 'note' would retype whatever note the slug picked, which nobody asked for.
+        const slug = body.slug ? String(body.slug) : undefined;
         const r = write(String(body.title), {
-          type: body.type || 'note',
+          slug,
+          type: body.type || (slug ? undefined : 'note'),
           tags: Array.isArray(body.tags) ? body.tags : undefined,
           body: String(body.body || ''),
           append: body.append === true,

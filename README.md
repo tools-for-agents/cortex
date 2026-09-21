@@ -58,6 +58,8 @@ Write `[[Other Note]]` to link and `#tags` to categorise. Links to notes that do
 cortex write "Neural Networks" --type concept --tags ml,ai \
   --body "Function approximator. Trained by [[Backpropagation]]. #deeplearning"
 cortex write "Neural Networks" --append --body "Modern variants: [[Transformers]]."
+cortex write "Backpropagation" --slug backprop --append --body "…"   # edit THAT note, whatever its file is called
+                                                                     # (the name is only the lookup — the note keeps its title)
 cortex capture "raw article text…" --source https://example.com   # inbox for later
 cortex search "train network error" -k 6 --tag deeplearning        # ranked snippets
 cortex read "Neural Networks"                                      # full note
@@ -120,7 +122,7 @@ node src/cli.js serve
 
 | Tool | Use it to… |
 |---|---|
-| `cortex_write` | Create/update a note — link with `[[wikilinks]]`, tag with `#tags`. Distil learnings into small interconnected notes. |
+| `cortex_write` | Create/update a note — link with `[[wikilinks]]`, tag with `#tags`. Distil learnings into small interconnected notes. Updating one you looked up? Pass its `slug` — in a real vault the filename is often not the title, and the title alone would write a second note. With a `slug` the title is just the name you looked it up by: the note keeps its own, and never gets renamed out from under the links that point at it. |
 | `cortex_capture` | Stash raw material (article, transcript, finding) into the source inbox to distil later. |
 | `cortex_search` | Recall what you already know as ranked, **token-budgeted** snippets — instead of re-deriving it. |
 | `cortex_read` | Read a full note by title / slug / alias. |

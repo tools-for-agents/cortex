@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // cortex CLI — a local second brain from the shell.
-//   cortex write "Title" --body "..." [--type concept] [--tags a,b] [--append]
+//   cortex write "Title" --body "..." [--type concept] [--tags a,b] [--append] [--slug s]
 //   cortex read "Title" | cortex search "query" [-k 8] [--tag x] [--type concept]
 //   cortex links "Title" [--in|--out] | cortex related "Title"
 //   cortex tags [name] | cortex graph | cortex recent | cortex daily "did X"
@@ -12,7 +12,7 @@ const [, , cmd, ...rest] = process.argv;
 // Tiny arg parser: flags that take a value vs booleans, so flag *values* (which
 // don't start with '-') aren't mistaken for the positional argument. A lone '-'
 // stays positional (the stdin sentinel).
-const VALUE = new Set(['--body', '--type', '--tags', '--aliases', '--title', '--source', '--tokens', '--tag', '--port', '-k']);
+const VALUE = new Set(['--body', '--type', '--tags', '--aliases', '--title', '--source', '--tokens', '--tag', '--port', '-k', '--slug']);
 const positionals = []; const flags = {};
 for (let i = 0; i < rest.length; i++) {
   const a = rest[i];
@@ -30,7 +30,11 @@ try {
   if (cmd === 'write') {
     let body = flag('--body', '');
     if (body === '-') body = stdin();
-    out(cx.write(arg(), { body, type: flag('--type'), tags: flag('--tags'),
+    // --slug edits THAT note, whatever its file is called. Without it a title whose note is
+    // filed under another slug (concepts/backprop.md titled "Backpropagation") creates a twin.
+    // With it, the positional is the NAME you looked the note up by — the note keeps its own
+    // title, because a rename here would break every [[wikilink]] that already points at it.
+    out(cx.write(arg(), { body, type: flag('--type'), tags: flag('--tags'), slug: flag('--slug'),
       aliases: flag('--aliases'), append: has('--append') }));
   } else if (cmd === 'capture') {
     let text = arg(); if (text === '-' || !text) text = stdin();
@@ -89,6 +93,7 @@ try {
     out(`cortex — a local, Obsidian-compatible second brain for agents
 
   cortex write "Title" --body "..."  [--type concept] [--tags a,b] [--aliases x] [--append]
+  cortex write "Name" --slug S --append --body "..."     edit THAT note (it keeps its own title)
   cortex capture "raw text" [--source URL] [--title T]   stash raw material to distil later
   cortex read "Title" [--tokens N]                       read a note
   cortex search "query" [-k N] [--tag x] [--type concept]

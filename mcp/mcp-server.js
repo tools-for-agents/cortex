@@ -14,9 +14,10 @@ const tools = [
     name: 'cortex_write',
     description: 'Create or update a note in your second brain. Body is markdown — link to other notes with [[Wikilinks]] and add #tags to grow the knowledge graph. Distil what you learn into small, interconnected notes (concept / entity / source / synthesis) instead of one big dump. Re-writing the same title updates it; use append:true to add to it.',
     inputSchema: { type: 'object', properties: {
-      title: { type: 'string', description: 'Note title (also its identity — same title updates the note)' },
+      title: { type: 'string', description: 'Note title (also its identity — same title updates the note). WITH slug it is only the name you looked that note up by: the note keeps its own title, and the result says so in "warning".' },
+      slug: { type: 'string', description: "The EXACT note to edit, as cortex_read/cortex_search/cortex_triage returned it. Use this whenever you are updating a note you already looked up: a vault's filenames are often not its titles (concepts/backprop.md titled \"Backpropagation\"), and title alone would create a second note. A slug that is not in the vault is an error, never a new note. It EDITS that note — it never renames it." },
       body: { type: 'string', description: 'Markdown body. Use [[Other Note]] links and #tags.' },
-      type: { type: 'string', description: 'concept | entity | source | synthesis | person | project | note (default note) — sets the folder' },
+      type: { type: 'string', description: 'concept | entity | source | synthesis | person | project | note (default note) — sets the folder for a NEW note. On an existing one it only rewrites the frontmatter type (the file does not move) — leave it out to keep the note as it is.' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Frontmatter tags' },
       aliases: { type: 'array', items: { type: 'string' }, description: 'Alternate names that [[links]] can resolve to' },
       append: { type: 'boolean', description: 'Append body to the existing note instead of replacing it' },
