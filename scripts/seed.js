@@ -8,7 +8,7 @@ import { write, graphData, sync, VAULT } from '../src/core.js';
 
 const notes = [
   ['Tools for Agents', 'moc', ['toolkit'],
-    'A zero-dependency operating system for AI agents. Six tools: [[Agent HQ]] to coordinate, [[lens]] to read code, [[anvil]] to run code, [[cortex]] to remember, [[scout]] to read the web, and [[recall]] to pull it all together. Everything speaks [[MCP]].'],
+    'A zero-dependency operating system for AI agents. Its tools include: [[Agent HQ]] to coordinate, [[lens]] to read code, [[anvil]] to run code, [[cortex]] to remember, [[scout]] to read the web, and [[recall]] to pull it all together. Everything speaks [[MCP]].'],
   ['Agent HQ', 'project', ['toolkit'],
     'The coordination platform: shared memory, a kanban board, an agent registry and a cost ledger, with a live dashboard. Home base for [[Tools for Agents]]. Exposed over [[MCP]].'],
   ['lens', 'project', ['toolkit', 'retrieval'],
